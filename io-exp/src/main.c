@@ -3,15 +3,12 @@
 #include <util/delay.h>
 #include <stdio.h>
 #include "adc.h"
-#include "i2c.h"
+#include "spi.h"
 #include "io.h"
 #include "uart.h"
 
 #define LED_PORT    PORTC
 #define LED         _BV(0)
-
-#define CD_LED_PORT PORTA
-#define CD_LED      _BV(7)
 
 ISR(BADISR_vect) {
     /* Default interrupt vector */
@@ -26,7 +23,7 @@ void print_state(void) {
     putchar('\n');
     io_print_state();
     adc_print_state();
-    i2c_print_state();
+    spi_print_state();
     printf("CPUINT.STATUS = %02x\n", CPUINT.STATUS);
 }
 
@@ -40,7 +37,7 @@ int main (void)
     io_init();
     uart_init();
     adc_init();
-    i2c_init();
+    spi_init();
     sei();
 
     puts("IO expander ready");
@@ -75,9 +72,6 @@ int main (void)
                     break;
                 case 'l':
                     LED_PORT.OUTTGL = LED;
-                    break;
-                case 'c':
-                    CD_LED_PORT.OUTTGL = CD_LED;
                     break;
             }
         }

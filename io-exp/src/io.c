@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include "io.h"
+#include "spi.h"
 
 uint8_t quad_state[2];
 uint16_t quad_pos[2];
@@ -54,6 +55,11 @@ static inline uint8_t read_encA(void) {
 ISR(PORTA_PORT_vect) {
     uint8_t q = read_encA();
 
+    if ((VPORTA.IN & SPI_SS_PIN) == 0) {
+        /* SPI callback on falling edge of ~SS */
+        spi_start();
+    }
+
     PORTA.INTFLAGS = PORTA.INTFLAGS;
 
     update_quad(0, q);
@@ -79,6 +85,7 @@ void io_init(void) {
 
     /* Input configs */
     PORTA.PIN0CTRL = DI_PINCTRL; // EncA.X
+    PORTA.PIN4CTRL = DI_PINCTRL; // ~SS
     PORTA.PIN5CTRL = DI_PINCTRL; // EncA.Y
     PORTA.PIN6CTRL = AI_PINCTRL;
     PORTA.PIN7CTRL = AI_PINCTRL;
