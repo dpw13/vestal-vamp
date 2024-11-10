@@ -1,0 +1,4 @@
+[submodule "io-exp/megaTinyCore"]
+	path = io-exp/megaTinyCore
+	url = https://github.com/SpenceKonde/megaTinyCore.git
+	branch = master
