@@ -1,0 +1,27 @@
+vin = vcc*(Rpot/(Rb + Rpot))
+
+frontend:
+- capacitive coupling + biasing
+- opamp + 2nd order LPF
+
+frontend -> ADC
+ADC -> sigma-delta sinc/decimation filter -DMA-> circ buffer A
+circ buffer A -> Windowing -> CMSIS FFT -> flatness normalization -DMA-> main audio buffer
+
+main audio buffer -> phase & frequency interpolation -> IFFT -> add overlap -DMA-> DAC -> frontend
+granulation controller -/
+
+Buffers:
+hw FIFOs: ADC, sigma-delta decimation filter
+time-domain circular input buffer
+input FFT buffer: windowing, CMSIS FFT, normalization
+frequency-domain audio buffer
+output FFT buffer: freq interpolation, CMSIS IFFT
+time-domain circular output buffer
+hw FIFOs: DAC
+
+some data may be copied into local fast SRAM for computation (FFT buffers) and out into PSRAM
+for storage (main buffer)
+
+1) ADC -DMA-> buffer -DMA-> DAC
+2) ADC -DMA-> buffer -> FFT -DMA-> buffer -DMA-> IFFT -> DAC
