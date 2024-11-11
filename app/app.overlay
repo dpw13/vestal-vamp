@@ -1,0 +1,87 @@
+/ {
+	chosen {
+		zephyr,code-partition = &slot0_partition;
+	};
+};
+
+&fdcan1 {
+	status = "disabled";
+};
+
+&octospi1 {
+	pinctrl-0 = <&octospim_p1_dqs_pa1 &octospim_p1_clk_pa3 &octospim_p1_io0_pa2 &octospim_p1_io1_pb0 &octospim_p1_io2_pa7 &octospim_p1_io3_pa6>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+&adc1 {
+	st,adc-clock-source = <1>;
+	st,adc-prescaler = <4>;
+	vref-mv = <3300>;
+	status = "okay";
+};
+
+&adc2 {
+	st,adc-clock-source = <1>;
+	st,adc-prescaler = <4>;
+	vref-mv = <3300>;
+	status = "okay";
+};
+
+&dac1 {
+	status = "okay";
+};
+
+&dma1 {
+	status = "okay";
+};
+
+&dma2 {
+	status = "okay";
+};
+
+&bdma1 {
+	status = "okay";
+};
+
+&dmamux1 {
+	status = "okay";
+};
+
+&dmamux2 {
+	status = "okay";
+};
+
+&sram4 {
+	zephyr,memory-attr = <DT_MEM_ARM_MPU_RAM_NOCACHE>;
+	status = "okay";
+};
+
+&mac {
+	status = "okay";
+};
+
+&flash0 {
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		boot_partition: partition@0 {
+			label = "mcuboot";
+			reg = <0x00000000 0xc000>;
+		};
+		slot0_partition: partition@c000 {
+			label = "image-0";
+			reg = <0x0000C000 0x60000>;
+		};
+		slot1_partition: partition@6c000 {
+			label = "image-1";
+			reg = <0x0006c000 0x60000>;
+		};
+		storage_partition: partition@bc000 {
+			label = "storage";
+			reg = <0x000bc000 0x00044000>;
+		};
+	};
+};

@@ -1,0 +1,5 @@
+venv
+.west
+bootloader
+modules
+tools
