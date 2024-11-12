@@ -25,3 +25,11 @@ for storage (main buffer)
 
 1) ADC -DMA-> buffer -DMA-> DAC
 2) ADC -DMA-> buffer -> FFT -DMA-> buffer -DMA-> IFFT -> DAC
+
+# Building
+
+$ ./venv/bin/activate
+$ west build -b nucleo_h723zg app
+
+> usbipd bind -i 0483:374e
+> usbipd attach -a -w -i 0483:374e

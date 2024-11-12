@@ -1,7 +1,8 @@
 sample:
-  name: Blinky Sample
+  name: vestal-vamp
+  description: Vestal Vamp Digital Effects Pedal
 tests:
-  sample.basic.blinky:
+  sample.basic.vestal-vamp:
     tags:
       - LED
       - gpio
