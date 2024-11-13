@@ -33,3 +33,6 @@ $ west build -b nucleo_h723zg app
 
 > usbipd bind -i 0483:374e
 > usbipd attach -a -w -i 0483:374e
+
+We eventually may want to restructure the repo to make the top-level a zephyr workspace
+and just the application the vv repo.

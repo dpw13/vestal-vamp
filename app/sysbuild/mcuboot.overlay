@@ -1,0 +1,39 @@
+/ {
+	chosen {
+		zephyr,code-partition = &boot_partition;
+	};
+	aliases {
+		mcuboot-button0 = &user_button;
+		mcuboot-led0 = &red_led;
+    };
+};
+
+&flash0 {
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		boot_partition: partition@0 {
+			label = "mcuboot";
+			reg = <0x00000000 0x20000>;
+		};
+		slot0_partition: partition@20000 {
+			label = "image-0";
+			reg = <0x00020000 0x60000>;
+		};
+		slot1_partition: partition@80000 {
+			label = "image-1";
+			reg = <0x00080000 0x60000>;
+		};
+
+		storage_partition: partition@e0000 {
+			label = "storage";
+			reg = <0x000e0000 0x00020000>;
+		};
+	};
+};
+
+&fdcan1 {
+	status = "disabled";
+};
