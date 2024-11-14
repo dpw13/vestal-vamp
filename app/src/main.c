@@ -8,6 +8,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/gpio.h>
 
+#include "adc.h"
 #include "display.h"
 
 /* 1000 msec = 1 sec */
@@ -39,6 +40,8 @@ int main(void)
 		return 0;
 	}
 
+	adc_init();
+	adc_start();
 	display_init();
 	display_text(1, "Hello World");
 
@@ -51,6 +54,7 @@ int main(void)
 		led_state = !led_state;
 		//printf("LED state: %s\n", led_state ? "ON" : "OFF");
 		display_bar(3, 50);
+		adc_sample();
 		k_msleep(SLEEP_TIME_MS);
 	}
 	return 0;

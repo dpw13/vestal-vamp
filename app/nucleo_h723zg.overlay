@@ -2,6 +2,15 @@
 	chosen {
 		zephyr,code-partition = &slot0_partition;
 	};
+
+	aliases {
+		audio-in = &adc1;
+	};
+
+	zephyr,user {
+		/* adjust channel number according to pinmux in board.dts */
+		io-channels = <&adc1 19>;
+	};
 };
 
 &flash0 {
@@ -41,10 +50,29 @@
 };
 
 &adc1 {
-	st,adc-clock-source = <1>;
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	pinctrl-0 = <&adc1_inp19_pa5>;	/* PA5 */
+	pinctrl-names = "default";
+
+	st,adc-clock-source = <SYNC>;
+	/* 34375 kHz or 550 MHz/16 */
 	st,adc-prescaler = <4>;
 	vref-mv = <3300>;
 	status = "okay";
+
+	dmas = <&dmamux1 3 9 (STM32_DMA_PERIPH_TO_MEMORY | STM32_DMA_MEM_INC |
+		       STM32_DMA_MEM_16BITS | STM32_DMA_PERIPH_16BITS)>;
+	dma-names = "rx";
+
+	channel@13 {
+		reg = <19>;
+		zephyr,gain = "ADC_GAIN_1";
+		zephyr,reference = "ADC_REF_INTERNAL";
+		zephyr,acquisition-time = <ADC_ACQ_TIME(ADC_ACQ_TIME_TICKS, 811)>;
+		zephyr,resolution = <16>;
+	};
 };
 
 &adc2 {
