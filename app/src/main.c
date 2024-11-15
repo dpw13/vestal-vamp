@@ -9,6 +9,7 @@
 #include <zephyr/drivers/gpio.h>
 
 #include "adc.h"
+#include "dac.h"
 #include "display.h"
 
 /* 1000 msec = 1 sec */
@@ -41,9 +42,12 @@ int main(void)
 	}
 
 	adc_init();
+	dac_init();
 	adc_start();
 	display_init();
 	display_text(1, "Hello World");
+
+	k_msleep(100);
 
 	while (1) {
 		ret = gpio_pin_toggle_dt(&led);

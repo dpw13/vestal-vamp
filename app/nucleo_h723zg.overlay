@@ -83,7 +83,13 @@
 };
 
 &dac1 {
+	pinctrl-0 = <&dac1_out1_pa4>;
+	pinctrl-names = "default";
 	status = "okay";
+
+	dmas = <&dmamux1 4 67 (STM32_DMA_MEMORY_TO_PERIPH | STM32_DMA_MEM_INC |
+		       STM32_DMA_MEM_16BITS | STM32_DMA_PERIPH_16BITS)>;
+	dma-names = "tx";
 };
 
 &dma1 {

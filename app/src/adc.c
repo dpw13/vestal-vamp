@@ -1,9 +1,3 @@
-/*
- * Copyright (c) 2024 Centro de Inovacao EDGE
- *
- * SPDX-License-Identifier: Apache-2.0
- */
-
 #include <zephyr/drivers/adc.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
@@ -97,11 +91,9 @@ int adc_start(void) {
 			LOG_ERR("Could not read (%d)", err);
 			return err;
 		}
-
-		LOG_INF("- %s, channel %d: %"PRId16":%"PRId16,
-			adc_channels[i].dev->name,
-			adc_channels[i].channel_id,
-			buffer[0], buffer[AUDIO_IN_BUF_SIZE-1]);
+		/* This is hacked together such that the read call returns
+		 * before data is available, as we're in streaming mode.
+		 */
 	}
 
 	return 0;
