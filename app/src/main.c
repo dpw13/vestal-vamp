@@ -11,9 +11,11 @@
 #include "adc.h"
 #include "dac.h"
 #include "display.h"
+#include "timer.h"
 
 /* 1000 msec = 1 sec */
-#define SLEEP_TIME_MS   750
+//#define SLEEP_TIME_MS   750
+#define SLEEP_TIME_MS   5000
 
 /* The devicetree node identifier for the "led0" alias. */
 #define LED0_NODE DT_ALIAS(led0)
@@ -21,10 +23,9 @@
 static const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(LED0_NODE, gpios);
 
 /* TODO:
-ADC init
-DMA
-DAC init
 SPI to ioexp
+FFT/IFFT
+granular control
 */
 
 int main(void)
@@ -43,9 +44,12 @@ int main(void)
 
 	adc_init();
 	dac_init();
-	adc_start();
+	timer_init();
 	display_init();
 	display_text(1, "Hello World");
+
+	adc_start();
+	timer_start();
 
 	k_msleep(100);
 
@@ -58,7 +62,9 @@ int main(void)
 		led_state = !led_state;
 		//printf("LED state: %s\n", led_state ? "ON" : "OFF");
 		display_bar(3, 50);
-		adc_sample();
+		timer_stats();
+		adc_stats();
+		dac_stats();
 		k_msleep(SLEEP_TIME_MS);
 	}
 	return 0;

@@ -13,9 +13,6 @@ LOG_MODULE_REGISTER(audio_adc);
 #define DT_SPEC_AND_COMMA(node_id, prop, idx) \
 	ADC_DT_SPEC_GET_BY_IDX(node_id, idx),
 
-#define DT_SPEC_AND_COMMA(node_id, prop, idx) \
-	ADC_DT_SPEC_GET_BY_IDX(node_id, idx),
-
 /* Data of ADC io-channels specified in devicetree. */
 static const struct adc_dt_spec adc_channels[] = {
 	DT_FOREACH_PROP_ELEM(DT_PATH(zephyr_user), io_channels,
@@ -70,6 +67,10 @@ int adc_init(void) {
 			return ret;
 		}
 
+		LOG_INF("ADC %s:%d: %d bits, vref %d, %d ticks, trig %d",
+			adc_channels[i].dev->name, adc_channels[i].channel_id,
+			adc_channels[i].resolution, adc_channels[i].vref_mv,
+			adc_channels[i].channel_cfg.acquisition_time, adc_channels[i].channel_cfg.trig_src);
 		ret = adc_channel_setup_dt(&adc_channels[i]);
 		if (ret < 0) {
 			LOG_ERR("Could not setup channel #%d (%d)\n", i, ret);
@@ -99,8 +100,7 @@ int adc_start(void) {
 	return 0;
 }
 
-int adc_sample(void) {
-
+int adc_stats(void) {
 	LOG_INF("%d samples: %"PRId16":%"PRId16" x %"PRId16":%"PRId16,
 		sample_count,
 		buffer[0],

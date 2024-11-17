@@ -7,5 +7,6 @@
 #define DAC_RESOLUTION 12
 
 int dac_init(void);
+int dac_stats(void);
 
 #endif /* __DAC_H__ */

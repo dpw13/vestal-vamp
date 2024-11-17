@@ -70,8 +70,9 @@
 		reg = <19>;
 		zephyr,gain = "ADC_GAIN_1";
 		zephyr,reference = "ADC_REF_INTERNAL";
-		zephyr,acquisition-time = <ADC_ACQ_TIME(ADC_ACQ_TIME_TICKS, 811)>;
+		zephyr,acquisition-time = <ADC_ACQ_TIME(ADC_ACQ_TIME_TICKS, 388)>;
 		zephyr,resolution = <16>;
+		zephyr,trig-src = <13>;
 	};
 };
 
@@ -132,5 +133,14 @@
 		reg = <0>;
 		columns = <10>;
 		rows = <4>;
+	};
+};
+
+&timers6 {
+	st,prescaler = <16>;
+	status = "okay";
+
+	counter {
+		status = "okay";
 	};
 };

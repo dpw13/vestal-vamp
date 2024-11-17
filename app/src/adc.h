@@ -9,6 +9,6 @@
 
 int adc_init(void);
 int adc_start(void);
-int adc_sample(void);
+int adc_stats(void);
 
 #endif /* __ADC_H__ */
