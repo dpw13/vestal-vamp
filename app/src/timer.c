@@ -58,3 +58,13 @@ int timer_stats(void) {
 
         return ret;
 }
+
+int timer_stop(void) {
+        int ret;
+        ret = counter_stop(counter_dev);
+
+        if (ret < 0) {
+                LOG_ERR("Failed to start counter: %d", ret);
+        }
+        return ret;
+}

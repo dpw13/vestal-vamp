@@ -52,6 +52,7 @@ int main(void)
 	timer_start();
 
 	k_msleep(100);
+	//timer_stop();
 
 	while (1) {
 		ret = gpio_pin_toggle_dt(&led);

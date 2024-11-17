@@ -70,7 +70,7 @@
 		reg = <19>;
 		zephyr,gain = "ADC_GAIN_1";
 		zephyr,reference = "ADC_REF_INTERNAL";
-		zephyr,acquisition-time = <ADC_ACQ_TIME(ADC_ACQ_TIME_TICKS, 388)>;
+		zephyr,acquisition-time = <ADC_ACQ_TIME(ADC_ACQ_TIME_TICKS, 17)>;
 		zephyr,resolution = <16>;
 		zephyr,trig-src = <13>;
 	};
@@ -80,7 +80,7 @@
 	st,adc-clock-source = <1>;
 	st,adc-prescaler = <4>;
 	vref-mv = <3300>;
-	status = "okay";
+	status = "disabled";
 };
 
 &dac1 {

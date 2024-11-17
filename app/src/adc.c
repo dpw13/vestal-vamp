@@ -21,29 +21,31 @@ static const struct adc_dt_spec adc_channels[] = {
 
 /* The size of the buffer in samples */
 #define AUDIO_IN_SAMPLE_CNT	1024
-#define AUDIO_IN_BUF_CNT	2
-#define AUDIO_IN_BUF_SIZE	(AUDIO_IN_BUF_CNT * AUDIO_IN_SAMPLE_CNT)
-static uint16_t buffer[AUDIO_IN_BUF_SIZE] __attribute__((__section__("SRAM4")));
+static uint16_t buffer[AUDIO_IN_SAMPLE_CNT] __attribute__((__section__("SRAM4")));
 
 static uint32_t sample_count;
 
 enum adc_action adc_sequence_cb(const struct device *dev, const struct adc_sequence *sequence, uint16_t sampling_index) {
-	sample_count += AUDIO_IN_SAMPLE_CNT;
+	sample_count += AUDIO_IN_SAMPLE_CNT/2;
 
-	//uint16_t *buf = &((uint16_t *)sequence->buffer)[AUDIO_IN_SAMPLE_CNT * sampling_index];
-	//LOG_INF("- %s, idx %d %p:%p: %"PRId16":%"PRId16" x %"PRId16":%"PRId16,
-	//	dev->name, sampling_index, buf, &buf[AUDIO_IN_SAMPLE_CNT-1],
-	//	buf[0], buf[AUDIO_IN_SAMPLE_CNT - 1], buf[AUDIO_IN_SAMPLE_CNT], buf[2*AUDIO_IN_SAMPLE_CNT - 1]);
+	/* By the time we execute, the previous buffer is already being overwritten. We
+	 * can only rely on the fact that the *new* buffer will be stable until the next
+	 * callback.
+	 */
+	//LOG_INF("- %s %d: %"PRId16":%"PRId16" x %"PRId16":%"PRId16,
+	//	dev->name, sampling_index,
+	//	buffer[8], buffer[AUDIO_IN_SAMPLE_CNT/2 - 8],
+	//	buffer[AUDIO_IN_SAMPLE_CNT/2 + 8], buffer[AUDIO_IN_SAMPLE_CNT - 8]);
+	//LOG_INF("adc_sequence_cb %d: %d", sampling_index, sample_count);
 
-	if (sampling_index == AUDIO_IN_BUF_CNT-1) {
+	if (sampling_index > 0) {
 		return ADC_ACTION_REPEAT;
 	}
-	
+
 	return ADC_ACTION_CONTINUE;
-} 
+}
 
 const struct adc_sequence_options opts = {
-	.extra_samplings = AUDIO_IN_BUF_CNT - 1,
 	.callback = &adc_sequence_cb,
 	.block_size = AUDIO_IN_SAMPLE_CNT,
 	.continuous = true,
@@ -101,12 +103,10 @@ int adc_start(void) {
 }
 
 int adc_stats(void) {
-	LOG_INF("%d samples: %"PRId16":%"PRId16" x %"PRId16":%"PRId16,
+	LOG_INF("%s: %d samples: %"PRId16":%"PRId16, adc_channels[0].dev->name,
 		sample_count,
 		buffer[0],
-		buffer[AUDIO_IN_SAMPLE_CNT - 1],
-		buffer[AUDIO_IN_SAMPLE_CNT],
-		buffer[2*AUDIO_IN_SAMPLE_CNT - 1]);
+		buffer[AUDIO_IN_SAMPLE_CNT - 1]);
 
 	return 0;
 
