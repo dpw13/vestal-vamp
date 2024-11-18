@@ -124,6 +124,10 @@
 
 &spi1 {
 	fifo-enable;
+	pinctrl-0 = <&spi1_nss_pa15 &spi1_sck_pb3 &spi1_miso_pb4 &spi1_mosi_pb5>;
+	pinctrl-names = "default";
+	/* This ensures we use hardware /CS control */
+	/delete-property/ cs-gpios;
 
 	auxdisplay_0: display@0 {
 		compatible = "ptc,pt6314";

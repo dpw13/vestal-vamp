@@ -48,6 +48,6 @@ int dac_init(void) {
 }
 
 int dac_stats(void) {
-        LOG_INF("%s %d samples", dac_dev->name, sample_count);
+        LOG_INF("%s: %d samples", dac_dev->name, sample_count);
         return 0;
 }

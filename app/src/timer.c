@@ -12,7 +12,7 @@ int timer_init(void) {
         int ret;
 
 	if (!device_is_ready(counter_dev)) {
-		LOG_ERR("device not ready.\n");
+		LOG_ERR("%s: device not ready.", DT_NODE_FULL_NAME(TIMER_NODE));
 		return -EBUSY;
 	}
 
@@ -25,8 +25,8 @@ int timer_init(void) {
                 .flags = COUNTER_TOP_CFG_ENABLE_TRIG,
         };
 
-        LOG_INF("Timer %s base frequency %d Hz. Using %d ticks for %d Hz",
-                counter_dev->name, freq, ticks, actual);
+        LOG_INF("%s: base frequency %d Hz. Using %d ticks for %d Hz",
+                DT_NODE_FULL_NAME(TIMER_NODE), freq, ticks, actual);
 
         ret = counter_set_top_value(counter_dev, &counter_top_cfg);
 
