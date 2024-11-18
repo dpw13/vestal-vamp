@@ -4,12 +4,15 @@
 	};
 
 	aliases {
-		audio-in = &adc1;
 	};
 
 	zephyr,user {
-		/* adjust channel number according to pinmux in board.dts */
 		io-channels = <&adc1 19>;
+		io-channel-names = "audio_in";
+
+		dmas = <&dmamux1 5 9 (STM32_DMA_MEMORY_TO_MEMORY | STM32_DMA_MEM_INC |
+		       STM32_DMA_MEM_32BITS | STM32_DMA_PERIPH_32BITS)>;
+		dma-names = "audio_in_dma";
 	};
 };
 

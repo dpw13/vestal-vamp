@@ -26,6 +26,11 @@ for storage (main buffer)
 1) ADC -DMA-> buffer -DMA-> DAC
 2) ADC -DMA-> buffer -> FFT -DMA-> buffer -DMA-> IFFT -> DAC
 
+FFTs need to overlap and the algorithm modifies the source buffer, so we need to duplicate the
+input stream for each FFT.
+-> Can we DMA straight from the ADC buffer into blobs for FFT generation? We need to do two FFTs
+per buffer (given 50% overlap). Can we even detect an overflow?
+
 # Building
 
 $ ./venv/bin/activate
