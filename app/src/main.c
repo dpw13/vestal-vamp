@@ -12,6 +12,7 @@
 #include "dac.h"
 #include "display.h"
 #include "timer.h"
+#include "fft_dma.h"
 
 /* 1000 msec = 1 sec */
 //#define SLEEP_TIME_MS   750
@@ -41,6 +42,9 @@ int main(void)
 	if (ret < 0) {
 		return 0;
 	}
+
+	/* Data init */
+	fft_init();
 
 	adc_init();
 	dac_init();
