@@ -9,7 +9,7 @@
 #include <arm_math.h>
 #include <arm_const_structs.h>
 
-LOG_MODULE_REGISTER(fft_dma);
+LOG_MODULE_REGISTER(fft_dma, LOG_LEVEL_INF);
 
 static uint16_t fft_buffer[FFT_SIZE] __attribute__((__section__("SRAM1")));
 
@@ -133,12 +133,17 @@ static void window_done(void) {
 /* FFT support structures */
 static arm_rfft_instance_q15 S;
 
+static q15_t window[FFT_SIZE] __attribute__((__section__("SRAM1")));;
+
 /* TODO: external SRAM */
 /* Technically this is fixed point 11.5 for FFT size of 1024 */
 static q15_t fft_freq[2*FFT_SIZE];
 
 /* Work handler to process display updates */
 void fft_work_handler(struct k_work *work) {
+	LOG_DBG("Window start");
+	/* Apply window in-place to ADC samples */
+	arm_mult_q15(&window[0], &fft_buffer[0], &fft_buffer[0], FFT_SIZE);
 	LOG_DBG("FFT start");
         arm_rfft_q15(&S, (q15_t *)&fft_buffer[0], &fft_freq[0]);
 	LOG_DBG("FFT done");
@@ -164,6 +169,28 @@ static void dma_callback(const struct device *dev, void *user_data, uint32_t cha
 	}
 }
 
+/* Copied from arm_float_to_q15 and adapted to a single value */
+static inline q15_t arm_float_to_q15_once(float32_t in) {
+	return (q15_t) __SSAT((q31_t) (in * 32768.0f), 16);
+}
+
+/* Copied from arm_hanning_f32 */
+static void arm_hanning_q15(
+        q15_t * pDst,
+        uint32_t blockSize)
+{
+   float32_t k = 2.0f / ((float32_t) blockSize);
+   float32_t w;
+
+   for(uint32_t i=0;i<blockSize;i++)
+   {
+     w = PI * i * k;
+     w = 0.5f * (1.0f - cosf (w));
+     pDst[i] = arm_float_to_q15_once(w);
+   }
+}
+
+
 int fft_init(void) {
         int ret;
 
@@ -181,6 +208,9 @@ int fft_init(void) {
                 LOG_ERR("Could not initialize FFT %d", st);
                 return (int)st;
         }
+
+	/* Initialize window */
+	arm_hanning_q15(&window[0], FFT_SIZE);
 
         return 0;
 }
