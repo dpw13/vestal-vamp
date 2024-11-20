@@ -10,9 +10,11 @@
 		io-channels = <&adc1 19>;
 		io-channel-names = "audio_in";
 
-		dmas = <&dmamux1 5 9 (STM32_DMA_MEMORY_TO_MEMORY | STM32_DMA_MEM_INC |
+		dmas = <&dmamux1 5 0 (STM32_DMA_MEMORY_TO_MEMORY | STM32_DMA_MEM_INC |
+		       STM32_DMA_MEM_32BITS | STM32_DMA_PERIPH_32BITS)>,
+		       <&dmamux1 6 0 (STM32_DMA_MEMORY_TO_MEMORY | STM32_DMA_MEM_INC |
 		       STM32_DMA_MEM_32BITS | STM32_DMA_PERIPH_32BITS)>;
-		dma-names = "audio_in_dma";
+		dma-names = "audio_in_dma", "audio_out_dma";
 	};
 };
 

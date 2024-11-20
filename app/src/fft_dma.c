@@ -1,31 +1,39 @@
+#include <zephyr/cache.h>
 #include <zephyr/drivers/adc.h>
 #include <zephyr/drivers/dma.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
-#include "audio.h"
-#include "adc.h"
-#include "dma.h"
 
 #include <arm_math.h>
 #include <arm_const_structs.h>
 
+#include "audio.h"
+#include "adc.h"
+#include "dma.h"
+#include "freq_buffer.h"
+#include "math_support.h"
+
 LOG_MODULE_REGISTER(fft_dma, LOG_LEVEL_INF);
 
-static uint16_t fft_buffer[FFT_SIZE] __attribute__((__section__("SRAM1")));
+/* The buffer of real ADC samples. */
+static audio_raw_t fft_buffer[FFT_SIZE] __attribute__((__section__("SRAM1")));
 
-static void dma_callback(const struct device *dev, void *user_data, uint32_t channel, int status);
+static void fft_dma_callback(const struct device *dev, void *user_data, uint32_t channel, int status);
 
 /* Memory-to-memory burst size */
-#define DMA_M2M_BURST	8
+#define DMA_M2M_BURST	16
 
 /**
  * The memory-to-memory DMA device and configuration for FFT input
  */
-static struct dma_def dma_def = {
-	DT_DMA_DEF_BY_NAME(DT_PATH(zephyr_user), audio_in_dma, DMA_M2M_BURST, dma_callback),
+static struct dma_def fft_dma_def = {
+	DT_DMA_DEF_BY_NAME(DT_PATH(zephyr_user), audio_in_dma, DMA_M2M_BURST, fft_dma_callback),
 	.dma_blk_cfg = {
 		.block_size = FFT_SIZE * sizeof(int16_t),
 
+		/* This initial value is overwritten, but set to non-null to avoid a warning
+		 * in `dma_config`. */
+		.source_address = (uint32_t)&adc_buffer[0],
 		.source_addr_adj = DMA_ADDR_ADJ_INCREMENT,
 		.source_reload_en = 0,
 
@@ -44,7 +52,7 @@ static struct dma_def dma_def = {
 /**
  * The current sequence index
  */
-uint8_t active_seq;
+static uint8_t active_seq;
 
 /**
  * DMA parameters from ADC memory buffer to FFT buffer
@@ -63,16 +71,16 @@ struct inst_seq {
 /**
  * Helper macro for enumerating DMA/FFT sequence steps.
  * 
- * @param quarter Which quarter of the buffer to start DMA at
- * @param frac 1 to transfer a full FFT_SIZE block, 2 to transfer FFT_SIZE/2
- * @param dst_half Which half of a partial block (frac=2) to transfer
+ * @param src_ival Which quarter of the buffer to start DMA at
+ * @param dst_ival Which half of a partial block (frac=2) to transfer
+ * @param len_ival Length of block to transfer in units of OVERLAP_SAMPLES
  * @param _fft_ready If true, schedule an FFT on the data once transferred
  * @param _dma_ready If true, schedule the next DMA once the FFT has completed
  */
-#define SEQ_INST(quarter, frac, dst_half, _fft_ready, _dma_ready) { \
-	.dma_src = (uint32_t)&adc_buffer[(quarter)*FFT_SIZE/2], \
-	.dma_dst = (uint32_t)&fft_buffer[(dst_half)*FFT_SIZE/2], \
-	.dma_len = sizeof(uint16_t)*FFT_SIZE/(frac), \
+#define SEQ_INST(src_ival, dst_ival, len_ival, _fft_ready, _dma_ready) { \
+	.dma_src = (uint32_t)&adc_buffer[(src_ival)*OVERLAP_SAMPLES], \
+	.dma_dst = (uint32_t)&fft_buffer[(dst_ival)*OVERLAP_SAMPLES], \
+	.dma_len = sizeof(uint16_t)*(len_ival)*OVERLAP_SAMPLES, \
 	.fft_ready = _fft_ready, \
 	.dma_ready = _dma_ready, \
 }
@@ -80,15 +88,24 @@ struct inst_seq {
 /**
  * The schedule of DMA transfers and FFT computation to do for audio in. This
  * assumes the ADC DMA delivers one full FFT worth of raw samples each time
- * `fft_input_ready` is called, and that we compute FFTs with 50% overlap so
- * that there are 2 FFTs computed each time `fft_input_ready` is called.
+ * `submit_adc_samples` is called, and that we compute FFTs with 75% overlap so
+ * that there are 2 FFTs computed each time `submit_adc_samples` is called.
  */
 static const struct inst_seq seq[] = {
-	SEQ_INST(0, 1, 0, true, false),
-	SEQ_INST(1, 1, 0, true, true),
-	SEQ_INST(2, 1, 0, true, false),
-	SEQ_INST(3, 2, 0, false, true),
-	SEQ_INST(0, 2, 1, true, true),
+	/* The first INV_OVERLAP windows are contiguous */
+	SEQ_INST(0, 0, 4, true, false),
+	SEQ_INST(1, 0, 4, true, true),
+	SEQ_INST(2, 0, 4, true, true),
+	SEQ_INST(3, 0, 4, true, true),
+	/* Starting with the second window in the second half, we 
+	 * have to handle wraparound */
+	SEQ_INST(4, 0, 4, true, false),
+	SEQ_INST(5, 0, 3, false, true),
+	SEQ_INST(0, 3, 1, true, true),
+	SEQ_INST(6, 0, 2, false, true),
+	SEQ_INST(0, 2, 2, true, true),
+	SEQ_INST(7, 0, 1, false, true),
+	SEQ_INST(0, 1, 3, true, true),
 };
 
 static inline void incr_seq(void) {
@@ -102,7 +119,7 @@ static inline void xfer_next_buffer(void) {
 	uint32_t len = seq[active_seq].dma_len;
 	int ret;
 
-	ret = dma_reload(dma_def.dma_dev, dma_def.channel, 
+	ret = dma_reload(fft_dma_def.dma_dev, fft_dma_def.channel, 
 		src, dst, len);
 	if (ret < 0) {
 		LOG_ERR("Could not reload DMA: %d", ret);
@@ -110,12 +127,15 @@ static inline void xfer_next_buffer(void) {
 	LOG_DBG("DMA started: %d B from %p to %p", len, (void *)src, (void *)dst);
 }
 
-void fft_input_ready(void *buf, uint32_t len) {
+void submit_adc_samples(void *buf, uint32_t len) {
         /* TODO: check that buffers are available and we're at the expected
          * sequence step.
          */
+	LOG_DBG("ADC rx, seq %d", active_seq);
         xfer_next_buffer();
 }
+
+void schedule_ifft(void);
 
 /**
  * If the current state indicates that we can immediately start DMA for
@@ -133,21 +153,29 @@ static void window_done(void) {
 /* FFT support structures */
 static arm_rfft_instance_q15 S;
 
-static q15_t window[FFT_SIZE] __attribute__((__section__("SRAM1")));;
-
-/* TODO: external SRAM */
-/* Technically this is fixed point 11.5 for FFT size of 1024 */
-static q15_t fft_freq[2*FFT_SIZE];
+/* The windowing function. Ideally this would live in flash, not SRAM. */
+q15_t fft_window_func[FFT_SIZE] __attribute__((__section__("SRAM1")));
 
 /* Work handler to process display updates */
 void fft_work_handler(struct k_work *work) {
-	LOG_DBG("Window start");
+	//LOG_DBG("Window start");
+	/* Invalidate cache; the waveform present in fft_buffer is new. */
+	sys_cache_data_invd_range(&fft_buffer[0], sizeof(audio_raw_t)*FFT_SIZE);
 	/* Apply window in-place to ADC samples */
-	arm_mult_q15(&window[0], &fft_buffer[0], &fft_buffer[0], FFT_SIZE);
+	arm_mult_q15(&fft_window_func[0], &fft_buffer[0], &fft_buffer[0], FFT_SIZE);
 	LOG_DBG("FFT start");
-        arm_rfft_q15(&S, (q15_t *)&fft_buffer[0], &fft_freq[0]);
-	LOG_DBG("FFT done");
+	/* I assume we can write directly to the destination buffer. This may need to
+	 * be an additional DMA instead. */
+        arm_rfft_q15(&S, (q15_t *)&fft_buffer[0], &fft_freq[(size_t)wr_idx*2*FFT_SIZE]);
+	/* Increment the write index */
+	wr_idx = (wr_idx + 1) & WINDOW_IDX_MASK;
+	//LOG_DBG("FFT done");
 	window_done();
+	/* Schedule IFFT work */
+	/* TODO: We probably want to indicate which buffer was just written
+	 * so the IFFT side can determine "now".
+	 */
+	schedule_ifft();
 }
 
 /* Define the work handler */
@@ -160,18 +188,14 @@ static inline void schedule_fft(void) {
         }
 }
 
-static void dma_callback(const struct device *dev, void *user_data, uint32_t channel, int status) {
+static void fft_dma_callback(const struct device *dev, void *user_data, uint32_t channel, int status) {
 	/* TODO: book-keeping of buffers, check for overrun */
+	//LOG_DBG("DMA rx");
 	if (seq[active_seq].fft_ready) {
 		schedule_fft();
 	} else {
 		window_done();
 	}
-}
-
-/* Copied from arm_float_to_q15 and adapted to a single value */
-static inline q15_t arm_float_to_q15_once(float32_t in) {
-	return (q15_t) __SSAT((q31_t) (in * 32768.0f), 16);
 }
 
 /* Copied from arm_hanning_f32 */
@@ -195,8 +219,8 @@ int fft_init(void) {
         int ret;
 
 	/* Configure DMA for uncached SRAM4 buffer to cached SRAM1 buffer */
-	dma_def.dma_cfg.head_block = &dma_def.dma_blk_cfg;
-	ret = dma_config(dma_def.dma_dev, dma_def.channel, &dma_def.dma_cfg);
+	fft_dma_def.dma_cfg.head_block = &fft_dma_def.dma_blk_cfg;
+	ret = dma_config(fft_dma_def.dma_dev, fft_dma_def.channel, &fft_dma_def.dma_cfg);
 	if (ret != 0) {
 		LOG_ERR("Could not configure DMA: %d", ret);
 		return ret;
@@ -210,7 +234,10 @@ int fft_init(void) {
         }
 
 	/* Initialize window */
-	arm_hanning_q15(&window[0], FFT_SIZE);
+	arm_hanning_q15(&fft_window_func[0], FFT_SIZE);
+
+	/* Initialize buffer accounting */
+	wr_idx = 0;
 
         return 0;
 }

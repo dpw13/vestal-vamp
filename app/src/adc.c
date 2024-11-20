@@ -7,7 +7,7 @@
 #include "dma.h"
 #include "fft_dma.h"
 
-LOG_MODULE_REGISTER(audio_adc);
+LOG_MODULE_REGISTER(audio_adc, LOG_LEVEL_INF);
 
 /* Data of ADC io-channels specified in devicetree. */
 static const struct adc_dt_spec adc_channel = 
@@ -21,6 +21,7 @@ static uint32_t sample_count;
 
 static enum adc_action adc_sequence_cb(const struct device *dev, const struct adc_sequence *sequence, uint16_t sampling_index) {
 	sample_count += AUDIO_IN_BLOCK_SIZE;
+	LOG_DBG("adc_cb");
 
 	/* By the time we execute, the previous buffer is already being overwritten. We
 	 * can only rely on the fact that the *new* buffer will be stable until the next
@@ -28,12 +29,12 @@ static enum adc_action adc_sequence_cb(const struct device *dev, const struct ad
 	 */
 	if (sampling_index == 0) {
 		/* First half of buffer */
-		fft_input_ready(&adc_buffer[0], AUDIO_IN_BLOCK_SIZE);
+		submit_adc_samples(&adc_buffer[0], AUDIO_IN_BLOCK_SIZE);
 		return ADC_ACTION_CONTINUE;
 	}
 
 	/* Second half of buffer */
-	fft_input_ready(&adc_buffer[AUDIO_IN_BLOCK_SIZE], AUDIO_IN_BLOCK_SIZE);
+	submit_adc_samples(&adc_buffer[AUDIO_IN_BLOCK_SIZE], AUDIO_IN_BLOCK_SIZE);
 	return ADC_ACTION_REPEAT;
 }
 

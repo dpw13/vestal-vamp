@@ -2,21 +2,31 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <stm32_ll_dac.h>
+#include "audio.h"
 #include "dac.h"
+#include "ifft_dma.h"
 
-LOG_MODULE_REGISTER(audio_dac);
+LOG_MODULE_REGISTER(audio_dac, LOG_LEVEL_INF);
 
 static const struct device *const dac_dev = DEVICE_DT_GET(DT_NODELABEL(dac1));
 
-/* The size of the buffer in samples */
-#define AUDIO_OUT_SAMPLE_CNT	1024
-static uint16_t buffer[AUDIO_OUT_SAMPLE_CNT] __attribute__((__section__("SRAM4")));
+uint16_t dac_buffer[2*AUDIO_OUT_SAMPLE_CNT] __attribute__((__section__("SRAM4")));
 
 static uint32_t sample_count;
 
-uint8_t dac_convert_cb(const struct device *dev) {
-        //LOG_INF("dac_convert_cb");
-        sample_count += AUDIO_OUT_SAMPLE_CNT/2;
+uint8_t dac_convert_cb(const struct device *dev, uint16_t sampling_index) {
+        LOG_DBG("dac_convert_cb");
+
+	if (sampling_index == 0) {
+		/* First half of dac_buffer */
+		claim_dac_samples(&dac_buffer[0], AUDIO_OUT_SAMPLE_CNT);
+	} else {
+                /* Second half of dac_buffer*/
+		claim_dac_samples(&dac_buffer[AUDIO_OUT_SAMPLE_CNT], AUDIO_OUT_SAMPLE_CNT);
+
+        }
+
+        sample_count += AUDIO_OUT_SAMPLE_CNT;
         return 1;
 }
 
@@ -26,8 +36,8 @@ const static struct dac_channel_cfg dac_cfg = {
         .buffered = true,
         .continuous = true,
         .callback = &dac_convert_cb,
-        .buffer_base = &buffer[0],
-        .buffer_size = AUDIO_OUT_SAMPLE_CNT * sizeof(uint16_t),
+        .buffer_base = &dac_buffer[0],
+        .buffer_size = 2 * AUDIO_OUT_SAMPLE_CNT * sizeof(uint16_t),
         .trig_src = LL_DAC_TRIG_EXT_TIM6_TRGO,
 };
 

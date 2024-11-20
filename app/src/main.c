@@ -13,9 +13,8 @@
 #include "display.h"
 #include "timer.h"
 #include "fft_dma.h"
+#include "ifft_dma.h"
 
-/* 1000 msec = 1 sec */
-//#define SLEEP_TIME_MS   750
 #define SLEEP_TIME_MS   5000
 
 /* The devicetree node identifier for the "led0" alias. */
@@ -45,6 +44,7 @@ int main(void)
 
 	/* Data init */
 	fft_init();
+	ifft_init();
 
 	adc_init();
 	dac_init();
