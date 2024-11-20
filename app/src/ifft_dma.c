@@ -19,12 +19,12 @@ LOG_MODULE_REGISTER(ifft_dma, LOG_LEVEL_INF);
  * The frequency data for the IFFT. This is calculated from two frequency blocks
  * in the big frequency buffer.
  */
-static q15_t ifft_buffer[2*FFT_SIZE] __attribute__((__section__("SRAM1")));
+static q15_t ifft_buffer[2*FFT_SIZE];
 /**
  * The buffer of raw DAC samples out. These need to be windowed and accumulated into
  * the DAC buffer.
  */
-static q15_t ifft_raw_buffer[2*AUDIO_OUT_SAMPLE_CNT] __attribute__((__section__("SRAM1")));
+static q15_t ifft_raw_buffer[2*AUDIO_OUT_SAMPLE_CNT];
 
 /* A static buffer for accumulating phase. These are stored as sQ-1.16 in the range [-0.5,0.5). */
 static q15_t phase_buf[FFT_SIZE];
@@ -43,15 +43,15 @@ static uint32_t inv_two_pi;
  * TODO: validate that positive-going (1 s/s) and negative-moving (-1 s/s) interpolation are
  * equivalent.
  */
-static void interp_freq(frac_idx_t idx, uint16_t pitch_shift, q15_t phase_reset_threshold) {
+static void interp_freq(frac_idx_t idx, uint16_t pitch_shift) {
         uint32_t k;
         uint32_t idx_i = idx_ipart(idx);
         uint32_t idx_j = (idx_i + 1) & WINDOW_IDX_MASK;
         uint32_t frac_a = idx_fpart(idx);
         uint32_t frac_b = (1u << 31) - frac_a;
 
-        q15_t *src_buf[2] = {
-                get_freq_buf(idx_i), get_freq_buf(idx_j),
+        struct polar_freq_data *src_buf[2] = {
+                get_lt_buf(idx_i), get_lt_buf(idx_j),
         };
 
         /* Clear destination buffer */
@@ -63,19 +63,17 @@ static void interp_freq(frac_idx_t idx, uint16_t pitch_shift, q15_t phase_reset_
          * division and a single arm_atan2_q15.
          * TODO: Compare this naive approach to vectorized math.
          */
-        /* TODO: pre-calculate phase delta (freq offset) on input so that we
-         * only need to calculate the phase of each bin once. Below we are calculating
-         * the phase of each bin for *both* source buffers every window. If we store
-         * magnitude and phase, interpolation here becomes relatively simple.
+        /* TODO: pre-calculate phase delta (freq offset) on input. It's not clear whether
+         * this would give a benefit over calculating it from the source phases here.
          */
 
-        q15_t *src_a = src_buf[0];
-        q15_t *src_b = src_buf[1];
-        q15_t phase_a, phase_b;
+        q15_t *phase_a = &src_buf[0]->phase[0];
+        q15_t *phase_b = &src_buf[1]->phase[0];
+        q15_t *mag_a = &src_buf[0]->mag[0];
+        q15_t *mag_b = &src_buf[1]->mag[0];
+
         for (k=0; k < FFT_SIZE; k++) {
                 /* Step 1: Calculate delta phase as (signed) Q2.13. Range (-pi, pi] */
-                arm_atan2_q15(src_a[1], src_a[0], &phase_a);
-                arm_atan2_q15(src_b[1], src_b[0], &phase_b);
 
                 /* Step 1a: Divide by 2*pi to get normalized phase in units of bins per window.
                  * The range should be (-0.5, 0.5] cycles (0.16 fxp), representing a phase change
@@ -88,17 +86,17 @@ static void interp_freq(frac_idx_t idx, uint16_t pitch_shift, q15_t phase_reset_
                  * 
                  * TODO: The CMSIS DSP functions appear to never round. Do we want to round here?
                  */
-                phase_a = (q15_t)(((int32_t)phase_b - phase_a)*inv_two_pi >> 16);
+                q15_t phase = (q15_t)(((int32_t)(*phase_b++) - (*phase_a++))*inv_two_pi >> 16);
 
                 /* Step 1b: Subtract expected phase from overlapping windows. The phase should
                  * be 1/INV_OVERLAP cycles. As a sanity check, we see that if INV_OVERLAP=1,
                  * this does nothing. If INV_OVERLAP=2, this rotates odd bins 180 degrees.
                  */
                 /* bin_offset = INV_OVERLAP*wrap(delta_phase/M_TWOPI - k/INV_OVERLAP, +-1/2) */
-                phase_a -= k * (Q15_ONE / INV_OVERLAP);
+                phase -= k * (Q15_ONE / INV_OVERLAP);
 
                 /* Step 2: compute instantaneous frequency as k + INV_OVERLAP*inst_phase_delta */
-                q31_t inst_freq = (k << 16) + ((uint32_t)phase_a << INV_OVERLAP_BITS);
+                q31_t inst_freq = (k << 16) + ((uint32_t)phase << INV_OVERLAP_BITS);
 
                 /* Step 3: pitch shift.
                  *
@@ -118,20 +116,15 @@ static void interp_freq(frac_idx_t idx, uint16_t pitch_shift, q15_t phase_reset_
                 /* Step 4: Compute instantaneous phase = window delay * inst_freq. This value
                  * should be Q-1.16 in the range [-0.5, 0.5)
                  */
-                phase_a = (inst_freq * (Q15_ONE / INV_OVERLAP)) >> 16;
+                phase = (inst_freq * (Q15_ONE / INV_OVERLAP)) >> 16;
                 /* Accumulate instantaneous phase from previous window */
-                phase_a += phase_buf[dst_k];
+                phase += phase_buf[dst_k];
 
                 /* Step 5: Compute complex phasor for destination bin. */
                 /* 5a: Compute interpolated magnitude. Everything up to this point
                  * has only dealt with phase.
-                 *
-                 * Note: These increment src_a and src_b!
                  */
-                q15_t mag_a = arm_cmplx_mag_q15_once_ai(&src_a);
-                q15_t mag_b = arm_cmplx_mag_q15_once_ai(&src_b);
-                /* Interpolate into mag_a */
-                mag_a = mag_a*frac_a + mag_b*frac_b;
+                q15_t mag = (*mag_a++) * frac_a + (*mag_b++) * frac_b;
                 
                 /* 5b: compute phasor from magnitude and phase and add into destination bin. */
                 /* The q15 fast cos takes as its input sQ0.15 in the range [0, 1) and will
@@ -142,22 +135,34 @@ static void interp_freq(frac_idx_t idx, uint16_t pitch_shift, q15_t phase_reset_
                  * Here instead we accumulate the complex phasor, incorporating both magnitude
                  * and phase.
                  */
-                ifft_buffer[2*dst_k+0] += mag_a*arm_cos_q15(phase_a); /* Real */
-                ifft_buffer[2*dst_k+1] += mag_a*arm_sin_q15(phase_a); /* Imag */
+                ifft_buffer[2*dst_k+0] += mag*arm_cos_q15(phase); /* Real */
+                ifft_buffer[2*dst_k+1] += mag*arm_sin_q15(phase); /* Imag */
         }
+}
 
+/**
+ * Calculate the instantaneous phase in cycles for the phase accumulator.
+ * 
+ * @param phase_reset_threshold: an unsigned Q1.15 threshold for the *square* of the 
+ *      magnitude. Below this threshold, the phase of a frequency bin will be reset.
+ */
+static void recalc_phase(q15_t phase_reset_threshold) { 
         /* Compute final phase for next window */
-        src_a = &ifft_buffer[0];
-        src_b = &phase_buf[0];
-        for (k=0; k < FFT_SIZE; k++) {
-                q15_t mag = arm_cmplx_mag_sq_q15_once_ni(src_a);
+        q15_t *src = &ifft_buffer[0];
+        q15_t *dst = &phase_buf[0];
+        for (int k=0; k < FFT_SIZE; k++) {
+                q15_t mag = arm_cmplx_mag_sq_q15_once_ni(src);
 
                 if (mag < phase_reset_threshold) {
-                        *src_b++ = 0;
+                        *dst++ = 0;
                 } else {
-                        arm_atan2_q15(src_a[1], src_a[0], src_b++);
+                        q15_t phase;
+                        arm_atan2_q15(src[1], src[0], &phase);
+                        /* TODO: this radix point is almost certainly wrong */
+                        /* TODO: maybe vectorize */
+                        *dst++ = phase * inv_two_pi;
                 }
-                src_a += 2;
+                src += 2;
         }
 }
 
@@ -207,7 +212,9 @@ void ifft_work_handler(struct k_work *work) {
 
         current_sample_idx += tune;
 	LOG_DBG("Interp start 0x%08x", current_sample_idx);
-        interp_freq(current_sample_idx, pitch_shift, phase_reset_threshold);
+        interp_freq(current_sample_idx, pitch_shift);
+        LOG_DBG("Recalc phase");
+        recalc_phase(phase_reset_threshold);
 	LOG_DBG("FFT start %p to %p", &ifft_buffer[0], &ifft_raw_buffer[0]);
         arm_rfft_q15(&Srev, &ifft_buffer[0], &ifft_raw_buffer[0]);
 	LOG_DBG("Window start");
@@ -216,7 +223,7 @@ void ifft_work_handler(struct k_work *work) {
         /* Accumulate new window into waveform */
 	LOG_DBG("Accum into window %d", active_win);
 	accum_ifft_output();
-	LOG_DBG("Accum into window %d done", active_win);
+	LOG_DBG("Accum done");
 }
 
 /* Define the work handler */

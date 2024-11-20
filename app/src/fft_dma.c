@@ -16,7 +16,7 @@
 LOG_MODULE_REGISTER(fft_dma, LOG_LEVEL_INF);
 
 /* The buffer of real ADC samples. */
-static audio_raw_t fft_buffer[FFT_SIZE] __attribute__((__section__("SRAM1")));
+static audio_raw_t fft_buffer[FFT_SIZE];
 
 static void fft_dma_callback(const struct device *dev, void *user_data, uint32_t channel, int status);
 
@@ -150,11 +150,59 @@ static void window_done(void) {
 	}
 }
 
+/* A buffer to hold the raw complex frequency phasors. */
+static q15_t fft_cmplx_result[2*FFT_SIZE];
+
+static uint8_t fft_lcl_idx;
+
+/**
+ * Convert the complex FFT phasors to polar magnitude and phase. The polar
+ * form is easier to work with to calculate phase difference and interpolate
+ * magnitudes.
+ * 
+ * IGNORE BELOW: For now we're just storing the magnitude and phase, not
+ * the magnitude and normalized instaneous frequency.
+ * 
+ * What we store in long-term external PSRAM is the instantaneous magnitude
+ * and the frequency offset for each bin. The frequency offset is calculated
+ * as the phase difference between subsequent FFTs (taking into account the
+ * phase delay from overlapping sample windows) normalized to +/- 0.5 in
+ * Q0.15 format.
+ * 
+ * Calculating the magnitude is straight-forward, and we call the vectorized
+ * CMSIS-DSP functions to generate them. To determine the frequency offset,
+ * we must compute the angle of each FFT bin using atan2. Storing the previous
+ * FFT's angles allows us to efficiently compute the delta.
+ * 
+ * The intermediate buffer fft_freq_lcl then should contain the magnitude and
+ * instantaneous phase of the two most recent FFTs. We store these vectors
+ * serially rather than interleaved to enable the use of vectorized CMSIS
+ * functions.
+ * 
+ * @param dst The destination buffer in PSRAM for the computed magnitude and
+ * 	instantaneous frequency offset.
+ */
+void precalc_polar_diff(struct polar_freq_data *dst) {
+	/* Compute magnitude */
+	arm_cmplx_mag_fast_q15(&fft_cmplx_result[0], &dst->mag[0], FFT_SIZE);
+	/* Instantaneous phase */
+	q15_t *cmplx_src = &fft_cmplx_result[0];
+	q15_t *dst_ptr = &dst->phase[0];
+	for (int i=0; i<FFT_SIZE; i++) {
+		if (arm_atan2_q15(cmplx_src[1], cmplx_src[0], dst_ptr) != ARM_MATH_SUCCESS) {
+			/* Reset phase if the complex source is zero */
+			*dst_ptr = 0;
+		}
+		cmplx_src += 2;
+		dst_ptr++;
+	}
+}
+
 /* FFT support structures */
 static arm_rfft_instance_q15 S;
 
 /* The windowing function. Ideally this would live in flash, not SRAM. */
-q15_t fft_window_func[FFT_SIZE] __attribute__((__section__("SRAM1")));
+q15_t fft_window_func[FFT_SIZE];
 
 /* Work handler to process display updates */
 void fft_work_handler(struct k_work *work) {
@@ -164,9 +212,10 @@ void fft_work_handler(struct k_work *work) {
 	/* Apply window in-place to ADC samples */
 	arm_mult_q15(&fft_window_func[0], &fft_buffer[0], &fft_buffer[0], FFT_SIZE);
 	LOG_DBG("FFT start");
+        arm_rfft_q15(&S, (q15_t *)&fft_buffer[0], &fft_cmplx_result[0]);
 	/* I assume we can write directly to the destination buffer. This may need to
 	 * be an additional DMA instead. */
-        arm_rfft_q15(&S, (q15_t *)&fft_buffer[0], &fft_freq[(size_t)wr_idx*2*FFT_SIZE]);
+	precalc_polar_diff(&lt_buffer[wr_idx]);
 	/* Increment the write index */
 	wr_idx = (wr_idx + 1) & WINDOW_IDX_MASK;
 	//LOG_DBG("FFT done");
@@ -238,6 +287,7 @@ int fft_init(void) {
 
 	/* Initialize buffer accounting */
 	wr_idx = 0;
+	fft_lcl_idx = 0;
 
         return 0;
 }

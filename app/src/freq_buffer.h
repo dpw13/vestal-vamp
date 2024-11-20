@@ -18,8 +18,17 @@
 
 #define WINDOW_IDX_MASK     (WINDOW_COUNT - 1)
 
-/* TODO: external SRAM */
+/**
+ * Long-term frequency-domain data
+ */
+struct polar_freq_data {
+        q15_t mag[FFT_SIZE];
+        q15_t phase[FFT_SIZE];
+};
+
+/* TODO: external PSRAM */
 /* Technically this is fixed point 11.5 for FFT size of 1024 */
+extern struct polar_freq_data lt_buffer[WINDOW_COUNT];
 extern q15_t fft_freq[WINDOW_COUNT*2*FFT_SIZE];
 extern uint8_t wr_idx;
 
@@ -36,8 +45,8 @@ typedef uint32_t frac_idx_t;
 /**
  * Returns a pointer to the beginning of the i'th window.
  */
-static inline q15_t* get_freq_buf(uint32_t i) {
-        return &fft_freq[i * 2 * FFT_SIZE];
+static inline struct polar_freq_data* get_lt_buf(uint32_t i) {
+        return &lt_buffer[i];
 }
 
 /**
