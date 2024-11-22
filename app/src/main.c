@@ -15,6 +15,8 @@
 #include "fft_dma.h"
 #include "ifft_dma.h"
 
+#include "settings.h"
+
 #define SLEEP_TIME_MS   5000
 
 /* The devicetree node identifier for the "led0" alias. */
@@ -41,6 +43,8 @@ int main(void)
 	if (ret < 0) {
 		return 0;
 	}
+
+	settings_init();
 
 	/* Data init */
 	fft_init();

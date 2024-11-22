@@ -59,8 +59,6 @@ static void interp_freq(frac_idx_t idx, uint16_t pitch_shift) {
 
         /* Calculate phase delta. We calculate the phases of both buffers
          * and subtract them.
-         * TODO: Compare speed of two arm_atan2_q15 vs complex vector 
-         * division and a single arm_atan2_q15.
          * TODO: Compare this naive approach to vectorized math.
          */
         /* TODO: pre-calculate phase delta (freq offset) on input. It's not clear whether
