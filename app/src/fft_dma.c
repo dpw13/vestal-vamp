@@ -15,8 +15,11 @@
 
 LOG_MODULE_REGISTER(fft_dma, LOG_LEVEL_INF);
 
-/* The buffer of real ADC samples. */
-static audio_raw_t fft_buffer[FFT_SIZE];
+/* The buffer of real ADC samples. Align to cache line size. */
+/* There appears to be a bug somewhere that invaliding the data cache on
+ * an unaligned value causes corruption of memory after this buffer.
+ */
+static audio_raw_t fft_buffer[FFT_SIZE] __attribute__ ((aligned (32)));
 
 static void fft_dma_callback(const struct device *dev, void *user_data, uint32_t channel, int status);
 
@@ -151,7 +154,7 @@ static void window_done(void) {
 }
 
 /* A buffer to hold the raw complex frequency phasors. */
-static q15_t fft_cmplx_result[2*FFT_SIZE];
+static q15_t fft_cmplx_result[2*FFT_SIZE]  __attribute__ ((aligned (32)));
 
 static uint8_t fft_lcl_idx;
 
@@ -202,7 +205,7 @@ void precalc_polar_diff(struct polar_freq_data *dst) {
 static arm_rfft_instance_q15 S;
 
 /* The windowing function. Ideally this would live in flash, not SRAM. */
-q15_t fft_window_func[FFT_SIZE];
+q15_t fft_window_func[FFT_SIZE] __attribute__ ((aligned (32)));
 
 /* Work handler to process display updates */
 void fft_work_handler(struct k_work *work) {

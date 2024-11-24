@@ -19,15 +19,15 @@ LOG_MODULE_REGISTER(ifft_dma, LOG_LEVEL_INF);
  * The frequency data for the IFFT. This is calculated from two frequency blocks
  * in the big frequency buffer.
  */
-static q15_t ifft_buffer[2*FFT_SIZE];
+static q15_t ifft_buffer[2*FFT_SIZE] __attribute__ ((aligned (32)));
 /**
  * The buffer of raw DAC samples out. These need to be windowed and accumulated into
  * the DAC buffer.
  */
-static q15_t ifft_raw_buffer[2*AUDIO_OUT_SAMPLE_CNT];
+static q15_t ifft_raw_buffer[2*AUDIO_OUT_SAMPLE_CNT] __attribute__ ((aligned (32)));
 
 /* A static buffer for accumulating phase. These are stored as sQ-1.16 in the range [-0.5,0.5). */
-static q15_t phase_buf[FFT_SIZE];
+static q15_t phase_buf[FFT_SIZE] __attribute__ ((aligned (32)));
 
 /* 1/(2*M_PI_F) in uQ-2.18 format */
 static uint32_t inv_two_pi;
