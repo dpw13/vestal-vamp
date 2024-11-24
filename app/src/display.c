@@ -1,6 +1,7 @@
 #include <string.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/auxdisplay.h>
+#include <zephyr/drivers/gpio.h>
 #include <zephyr/logging/log.h>
 #include "display.h"
 
@@ -8,6 +9,12 @@
 #define DISP_PRIORITY 5
 
 LOG_MODULE_REGISTER(vv_display, LOG_LEVEL_INF);
+
+static const struct gpio_dt_spec reset_io =
+	GPIO_DT_SPEC_GET(DT_NODELABEL(disp_reset), gpios);
+
+static const struct gpio_dt_spec mode_io =
+	GPIO_DT_SPEC_GET(DT_NODELABEL(disp_mode), gpios);
 
 static const struct device *const aux_dev = DEVICE_DT_GET(DT_NODELABEL(auxdisplay_0));
 
@@ -251,6 +258,25 @@ uint8_t display_select_menu(void) {
     return menu_opt_selected;
 }
 
+static inline void display_reset(void) {
+    int rc;
+
+    /* Reset display */
+	rc = gpio_pin_set_dt(&reset_io, 1);
+	if (rc != 0) {
+		LOG_ERR("Failed to reset display: %d", rc);
+		return;
+	}
+    k_usleep(100);
+
+	rc = gpio_pin_set_dt(&reset_io, 0);
+	if (rc != 0) {
+		LOG_ERR("Failed to deassert reset: %d", rc);
+		return;
+	}
+    k_usleep(10);
+}
+
 void display_init(void) {
     int rc;
 
@@ -258,6 +284,20 @@ void display_init(void) {
 		LOG_ERR("Auxdisplay device is not ready.");
 		return;
 	}
+
+	rc = gpio_pin_configure_dt(&reset_io, GPIO_OUTPUT_ACTIVE);
+	if (rc != 0) {
+		printf("Configuring GPIO pin failed: %d\n", rc);
+		return;
+	}
+
+	rc = gpio_pin_configure_dt(&mode_io, GPIO_OUTPUT_ACTIVE);
+	if (rc != 0) {
+		printf("Configuring GPIO pin failed: %d\n", rc);
+		return;
+	}
+
+    display_reset();
 
 	rc = auxdisplay_cursor_set_enabled(aux_dev, true);
 	if (rc != 0) {

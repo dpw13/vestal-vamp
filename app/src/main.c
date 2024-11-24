@@ -59,7 +59,6 @@ int main(void)
 	adc_start();
 	timer_start();
 
-	k_msleep(100);
 	//timer_stop();
 
 	while (1) {

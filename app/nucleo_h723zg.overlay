@@ -3,9 +3,6 @@
 		zephyr,code-partition = &slot0_partition;
 	};
 
-	aliases {
-	};
-
 	zephyr,user {
 		io-channels = <&adc1 19>;
 		io-channel-names = "audio_in";
@@ -15,6 +12,17 @@
 		       <&dmamux1 6 0 (STM32_DMA_MEMORY_TO_MEMORY | STM32_DMA_MEM_INC |
 		       STM32_DMA_MEM_32BITS | STM32_DMA_PERIPH_32BITS)>;
 		dma-names = "audio_in_dma", "audio_out_dma";
+	};
+};
+
+&leds {
+	disp_reset: disp_reset {
+		gpios = <&gpiob 1 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+		label = "Auxdisplay Reset";
+	};
+	disp_mode: disp_mode {
+		gpios = <&gpioa 8 (GPIO_ACTIVE_HIGH | GPIO_PULL_UP)>;
+		label = "Auxdisplay Reset";
 	};
 };
 
@@ -127,16 +135,18 @@
 	status = "okay";
 };
 
-&spi1 {
+&spi2 {
 	fifo-enable;
-	pinctrl-0 = <&spi1_nss_pa15 &spi1_sck_pb3 &spi1_miso_pb4 &spi1_mosi_pb5>;
+	pinctrl-0 = <&spi2_nss_pb4 &spi2_sck_pb10 &spi2_miso_pb14 &spi2_mosi_pb15>;
 	pinctrl-names = "default";
+	status = "okay";
+
 	/* This ensures we use hardware /CS control */
 	/delete-property/ cs-gpios;
 
 	auxdisplay_0: display@0 {
 		compatible = "ptc,pt6314";
-		spi-max-frequency = <2500000>;
+		spi-max-frequency = <1000000>;
 		status = "okay";
 
 		reg = <0>;

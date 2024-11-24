@@ -41,3 +41,5 @@ $ west build -b nucleo_h723zg app
 
 We eventually may want to restructure the repo to make the top-level a zephyr workspace
 and just the application the vv repo.
+
+#  ~/zephyr-sdk-0.17.0/arm-zephyr-eabi/bin/arm-zephyr-eabi-gdb build/app/zephyr/zephyr.elf
