@@ -10,12 +10,6 @@
 
 LOG_MODULE_REGISTER(vv_display, LOG_LEVEL_INF);
 
-static const struct gpio_dt_spec reset_io =
-	GPIO_DT_SPEC_GET(DT_NODELABEL(disp_reset), gpios);
-
-static const struct gpio_dt_spec mode_io =
-	GPIO_DT_SPEC_GET(DT_NODELABEL(disp_mode), gpios);
-
 static const struct device *const aux_dev = DEVICE_DT_GET(DT_NODELABEL(auxdisplay_0));
 
 #define MENU_BUF_LEN    128
@@ -110,16 +104,18 @@ void display_bar(uint8_t line, uint8_t lvl) {
     const uint16_t tmp = (uint16_t)lvl * DISPLAY_CHAR_W * DISPLAY_HRES + 0x80;
     /* The number of columns to darken. */
     uint8_t cols = (uint8_t)(tmp >> 8);
-    uint8_t *ptr = &action.chars[0];
-
     action.line = line;
+
+    memset(&action.chars[0], ' ', DISPLAY_HRES);
+    uint8_t *ptr = &action.chars[0];
     for (int col=0; col < DISPLAY_CHAR_W * DISPLAY_HRES; col += DISPLAY_CHAR_W) {
         if (cols == 0) {
-            *ptr++ = (uint8_t)' ';
+            break;
         } else if (cols <= DISPLAY_CHAR_W) {
             /* Display one of the partial characters */
             *ptr++ = PARTIAL_BAR(cols);
             cols = 0;
+            break;
         } else {
             /* Display full character */
             *ptr++ = BAR_FULL;
@@ -258,25 +254,6 @@ uint8_t display_select_menu(void) {
     return menu_opt_selected;
 }
 
-static inline void display_reset(void) {
-    int rc;
-
-    /* Reset display */
-	rc = gpio_pin_set_dt(&reset_io, 1);
-	if (rc != 0) {
-		LOG_ERR("Failed to reset display: %d", rc);
-		return;
-	}
-    k_usleep(100);
-
-	rc = gpio_pin_set_dt(&reset_io, 0);
-	if (rc != 0) {
-		LOG_ERR("Failed to deassert reset: %d", rc);
-		return;
-	}
-    k_usleep(10);
-}
-
 void display_init(void) {
     int rc;
 
@@ -285,20 +262,8 @@ void display_init(void) {
 		return;
 	}
 
-	rc = gpio_pin_configure_dt(&reset_io, GPIO_OUTPUT_ACTIVE);
-	if (rc != 0) {
-		printf("Configuring GPIO pin failed: %d\n", rc);
-		return;
-	}
-
-	rc = gpio_pin_configure_dt(&mode_io, GPIO_OUTPUT_ACTIVE);
-	if (rc != 0) {
-		printf("Configuring GPIO pin failed: %d\n", rc);
-		return;
-	}
-
-    display_reset();
-
+    /*
+    auxdisplay_position_blinking_set_enabled(aux_dev, true);
 	rc = auxdisplay_cursor_set_enabled(aux_dev, true);
 	if (rc != 0) {
 		LOG_ERR("Failed to enable cursor: %d", rc);
@@ -316,12 +281,7 @@ void display_init(void) {
 		LOG_ERR("Failed to clear display: %d", rc);
 		return;
 	}
-
-    rc = auxdisplay_brightness_set(aux_dev, 4);
-	if (rc != 0) {
-		LOG_ERR("Failed to set brightness: %d", rc);
-		return;
-	}
+    */
 
     /* Initialize state variables */
     menu_opt_count = 0;

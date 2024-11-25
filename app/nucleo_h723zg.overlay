@@ -15,17 +15,6 @@
 	};
 };
 
-&leds {
-	disp_reset: disp_reset {
-		gpios = <&gpiob 1 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
-		label = "Auxdisplay Reset";
-	};
-	disp_mode: disp_mode {
-		gpios = <&gpioa 8 (GPIO_ACTIVE_HIGH | GPIO_PULL_UP)>;
-		label = "Auxdisplay Reset";
-	};
-};
-
 &flash0 {
 	partitions {
 		compatible = "fixed-partitions";
@@ -145,13 +134,17 @@
 	/delete-property/ cs-gpios;
 
 	auxdisplay_0: display@0 {
-		compatible = "ptc,pt6314";
+		compatible = "solomon,ssd1803a";
 		spi-max-frequency = <1000000>;
+		reg = <0>;
 		status = "okay";
 
-		reg = <0>;
-		columns = <10>;
+		reset-gpios = <&gpiob 1 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+		mode-gpios = <&gpioa 8 (GPIO_ACTIVE_HIGH | GPIO_PULL_UP)>;
+
+		columns = <20>;
 		rows = <4>;
+		cgrom-size = <240>;
 	};
 };
 

@@ -17,7 +17,7 @@
 
 #include "settings.h"
 
-#define SLEEP_TIME_MS   5000
+#define SLEEP_TIME_MS  2000
 
 /* The devicetree node identifier for the "led0" alias. */
 #define LED0_NODE DT_ALIAS(led0)
@@ -54,25 +54,36 @@ int main(void)
 	dac_init();
 	timer_init();
 	display_init();
-	display_text(1, "Hello World");
+	display_text(0, " Vestal");
+	display_text(1, "     Vamp");
+	//display_text(1, "+++Line 1");
+	//display_text(2, "---Line 2");
+	//display_text(3, "***Line 3");
 
 	adc_start();
 	timer_start();
 
 	//timer_stop();
 
+	uint16_t i=0;
 	while (1) {
+		uint8_t buf[8];
 		ret = gpio_pin_toggle_dt(&led);
 		if (ret < 0) {
 			return 0;
 		}
 
 		led_state = !led_state;
+
 		//printf("LED state: %s\n", led_state ? "ON" : "OFF");
-		display_bar(3, 50);
-		timer_stats();
-		adc_stats();
-		dac_stats();
+		//snprintf(buf, 8, "%d", i);
+		//display_text(1, buf);
+		display_bar(2, (i & 0x100) ? 256 - (i & 0xFF) : (i & 0xFF));
+		i++;
+
+		//timer_stats();
+		//adc_stats();
+		//dac_stats();
 		k_msleep(SLEEP_TIME_MS);
 	}
 	return 0;

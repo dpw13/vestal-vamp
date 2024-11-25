@@ -6,7 +6,7 @@
 #include "dac.h"
 #include "ifft_dma.h"
 
-LOG_MODULE_REGISTER(audio_dac, LOG_LEVEL_INF);
+LOG_MODULE_REGISTER(audio_dac, LOG_LEVEL_WRN);
 
 static const struct device *const dac_dev = DEVICE_DT_GET(DT_NODELABEL(dac1));
 
