@@ -11,7 +11,7 @@ target_sources(app PRIVATE
         src/display.c
         src/adc.c
         src/dac.c
-        src/io_serial.c
+        src/io.c
         src/timer.c
         src/freq_buffer.c
         src/fft_dma.c

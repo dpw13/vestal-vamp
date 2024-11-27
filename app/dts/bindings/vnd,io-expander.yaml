@@ -1,0 +1,9 @@
+# Copyright (c) 2020 Nordic Semiconductor ASA
+# SPDX-License-Identifier: Apache-2.0
+
+description: I/O Expander
+
+compatible: "vnd,io-expander"
+
+include:
+  - name: spi-device.yaml

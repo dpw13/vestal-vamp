@@ -2,10 +2,11 @@
 	chosen {
 		zephyr,code-partition = &slot0_partition;
 		ioexp,uart = &uart9;
+		ioexp,spi = &ioexp;
 	};
 
 	zephyr,user {
-		io-channels = <&adc1 19>;
+		io-channels = <&adc1 15>;
 		io-channel-names = "audio_in";
 
 		dmas = <&dmamux1 5 0 (STM32_DMA_MEMORY_TO_MEMORY | STM32_DMA_MEM_INC |
@@ -92,7 +93,7 @@
 	#address-cells = <1>;
 	#size-cells = <0>;
 
-	pinctrl-0 = <&adc1_inp19_pa5>;	/* PA5 */
+	pinctrl-0 = <&adc1_inp15_pa3>;	/* PA5 */
 	pinctrl-names = "default";
 
 	st,adc-clock-source = <SYNC>;
@@ -106,7 +107,7 @@
 	dma-names = "rx";
 
 	channel@13 {
-		reg = <19>;
+		reg = <15>;
 		zephyr,gain = "ADC_GAIN_1";
 		zephyr,reference = "ADC_REF_INTERNAL";
 		zephyr,acquisition-time = <ADC_ACQ_TIME(ADC_ACQ_TIME_TICKS, 17)>;
@@ -123,7 +124,7 @@
 };
 
 &dac1 {
-	pinctrl-0 = <&dac1_out1_pa4>;
+	pinctrl-0 = <&dac1_out2_pa5>;
 	pinctrl-names = "default";
 	status = "okay";
 
@@ -193,6 +194,13 @@
 
 	/* This ensures we use hardware /CS control */
 	/delete-property/ cs-gpios;
+
+	ioexp: ioexp@0 {
+		compatible = "vnd,io-expander";
+		spi-max-frequency = <DT_FREQ_M(10)>;
+		reg = <0>;
+		status = "okay";
+	};
 };
 
 &uart9 {

@@ -7,7 +7,7 @@
 #include "dma.h"
 #include "fft_dma.h"
 
-LOG_MODULE_REGISTER(audio_adc, LOG_LEVEL_WRN);
+LOG_MODULE_REGISTER(audio_adc, LOG_LEVEL_INF);
 
 /* Data of ADC io-channels specified in devicetree. */
 static const struct adc_dt_spec adc_channel = 

@@ -11,14 +11,14 @@
 #include "adc.h"
 #include "dac.h"
 #include "display.h"
-#include "io_serial.h"
+#include "io.h"
 #include "timer.h"
 #include "fft_dma.h"
 #include "ifft_dma.h"
 
 #include "settings.h"
 
-#define SLEEP_TIME_MS  100
+#define SLEEP_TIME_MS  500
 
 /* The devicetree node identifier for the "led0" alias. */
 #define LED0_NODE DT_ALIAS(led0)
@@ -46,7 +46,7 @@ int main(void)
 	}
 
 	settings_init();
-	io_serial_init();
+	io_init();
 
 	/* Data init */
 	fft_init();
@@ -84,18 +84,18 @@ int main(void)
 		display_bar(2, (i & 0x100) ? 256 - (i & 0xFF) : (i & 0xFF));
 		i++;
 
-#if 1
+#if 0
 		while (1) {
 			volatile uint32_t *pin = (volatile uint32_t *)(0x90000000);
 			volatile uint32_t *pout = (volatile uint32_t *)(0x90000010);
 			for (int j=0;j<256;j++) {
 				pout[j] = j;
-				//*pin = *pout;
+				pin[j] = pout[256 - j];
 			}
 			k_msleep(1);
 		}
 #endif
-		io_serial_work();
+		io_work();
 		//timer_stats();
 		//adc_stats();
 		//dac_stats();
