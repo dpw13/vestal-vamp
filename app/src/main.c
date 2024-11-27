@@ -65,9 +65,10 @@ int main(void)
 
 	//timer_stop();
 
+	k_msleep(1000);
+
 	uint16_t i=0;
 	while (1) {
-		uint8_t buf[8];
 		ret = gpio_pin_toggle_dt(&led);
 		if (ret < 0) {
 			return 0;
@@ -81,6 +82,18 @@ int main(void)
 		display_bar(2, (i & 0x100) ? 256 - (i & 0xFF) : (i & 0xFF));
 		i++;
 
+#if 1
+		while (1) {
+			volatile uint32_t *pin = (volatile uint32_t *)(0x90000000);
+			volatile uint32_t *pout = (volatile uint32_t *)(0x90000010);
+			for (int j=0;j<256;j++) {
+				pout[j] = j;
+				//*pin = *pout;
+			}
+			k_msleep(1);
+		}
+#endif
+		io_serial_work();
 		//timer_stats();
 		//adc_stats();
 		//dac_stats();

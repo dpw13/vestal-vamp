@@ -255,8 +255,6 @@ uint8_t display_select_menu(void) {
 }
 
 void display_init(void) {
-    int rc;
-
 	if (!device_is_ready(aux_dev)) {
 		LOG_ERR("Auxdisplay device is not ready.");
 		return;
