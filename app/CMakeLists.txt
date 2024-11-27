@@ -11,10 +11,12 @@ target_sources(app PRIVATE
         src/display.c
         src/adc.c
         src/dac.c
+        src/io_serial.c
         src/timer.c
         src/freq_buffer.c
         src/fft_dma.c
         src/ifft_dma.c
         src/settings.c
 )
+
 #zephyr_library_compile_options("-E")

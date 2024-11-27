@@ -1,6 +1,7 @@
 / {
 	chosen {
 		zephyr,code-partition = &slot0_partition;
+		ioexp,uart = &uart9;
 	};
 
 	zephyr,user {
@@ -182,6 +183,22 @@
 		rows = <4>;
 		cgrom-size = <240>;
 	};
+};
+
+&spi3 {
+	fifo-enable;
+	pinctrl-0 = <&spi3_nss_pa4 &spi3_sck_pb3 &spi3_miso_pb4 &spi3_mosi_pb5>;
+	pinctrl-names = "default";
+	status = "okay";
+
+	/* This ensures we use hardware /CS control */
+	/delete-property/ cs-gpios;
+};
+
+&uart9 {
+	pinctrl-0 = <&uart9_tx_pd15 &uart9_rx_pd14>;
+	pinctrl-names = "default";
+	status = "okay";
 };
 
 &timers6 {

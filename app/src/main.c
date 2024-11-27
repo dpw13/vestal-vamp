@@ -11,13 +11,14 @@
 #include "adc.h"
 #include "dac.h"
 #include "display.h"
+#include "io_serial.h"
 #include "timer.h"
 #include "fft_dma.h"
 #include "ifft_dma.h"
 
 #include "settings.h"
 
-#define SLEEP_TIME_MS  2000
+#define SLEEP_TIME_MS  100
 
 /* The devicetree node identifier for the "led0" alias. */
 #define LED0_NODE DT_ALIAS(led0)
@@ -45,6 +46,7 @@ int main(void)
 	}
 
 	settings_init();
+	io_serial_init();
 
 	/* Data init */
 	fft_init();
