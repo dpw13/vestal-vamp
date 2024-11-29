@@ -8,6 +8,8 @@
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/gpio.h>
 
+#include "filter.h"
+#include "opamp.h"
 #include "adc.h"
 #include "dac.h"
 #include "display.h"
@@ -52,6 +54,7 @@ int main(void)
 	fft_init();
 	ifft_init();
 
+	opamp_init();
 	adc_init();
 	dac_init();
 	timer_init();
@@ -62,6 +65,7 @@ int main(void)
 	//display_text(2, "---Line 2");
 	//display_text(3, "***Line 3");
 
+	filter_start();
 	adc_start();
 	timer_start();
 

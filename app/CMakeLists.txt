@@ -9,6 +9,8 @@ set_source_files_properties(src/settings.c PROPERTIES COMPILE_FLAGS -Wno-missing
 target_sources(app PRIVATE
         src/main.c
         src/display.c
+        src/opamp.c
+        src/filter.c
         src/adc.c
         src/dac.c
         src/io.c
@@ -17,6 +19,8 @@ target_sources(app PRIVATE
         src/fft_dma.c
         src/ifft_dma.c
         src/settings.c
+
+        src/dfsdm_stm32.c
 )
 
 #zephyr_library_compile_options("-E")

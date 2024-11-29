@@ -13,34 +13,8 @@ LOG_MODULE_REGISTER(audio_adc, LOG_LEVEL_INF);
 static const struct adc_dt_spec adc_channel = 
 	ADC_DT_SPEC_GET_BY_NAME(DT_PATH(zephyr_user), audio_in);
 
-/* The ADC raw sample buffer */
-audio_raw_t adc_buffer[AUDIO_IN_BLOCK_SIZE*2] __attribute__((__section__("SRAM4")));
-
-/* TODO: move to stats */
-static uint32_t sample_count;
-
-static enum adc_action adc_sequence_cb(const struct device *dev, const struct adc_sequence *sequence, uint16_t sampling_index) {
-	sample_count += AUDIO_IN_BLOCK_SIZE;
-	LOG_DBG("adc_cb");
-
-	/* By the time we execute, the previous buffer is already being overwritten. We
-	 * can only rely on the fact that the *new* buffer will be stable until the next
-	 * callback.
-	 */
-	if (sampling_index == 0) {
-		/* First half of buffer */
-		submit_adc_samples(&adc_buffer[0], AUDIO_IN_BLOCK_SIZE);
-		return ADC_ACTION_CONTINUE;
-	}
-
-	/* Second half of buffer */
-	submit_adc_samples(&adc_buffer[AUDIO_IN_BLOCK_SIZE], AUDIO_IN_BLOCK_SIZE);
-	return ADC_ACTION_REPEAT;
-}
 
 static const struct adc_sequence_options opts = {
-	.callback = &adc_sequence_cb,
-	.block_size = AUDIO_IN_BLOCK_SIZE*2,
 	.continuous = true,
 };
 
@@ -89,14 +63,4 @@ int adc_start(void) {
 	 */
 
 	return 0;
-}
-
-int adc_stats(void) {
-	LOG_INF("%s: %d samples: %"PRId16":%"PRId16, adc_channel.dev->name,
-		sample_count,
-		adc_buffer[0],
-		adc_buffer[AUDIO_IN_BLOCK_SIZE*2 - 1]);
-
-	return 0;
-
 }

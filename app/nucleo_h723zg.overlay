@@ -8,7 +8,7 @@
 	};
 
 	zephyr,user {
-		io-channels = <&adc1 15>;
+		io-channels = <&adc1 4>;
 		io-channel-names = "audio_in";
 
 		dmas = <&dmamux1 5 0 (STM32_DMA_MEMORY_TO_MEMORY | STM32_DMA_MEM_INC |
@@ -112,11 +112,18 @@
 	};
 };
 
+&dfsdm1 {
+	/* This DMA is actually pointed at the DFSDM filter rather than ADC1 */
+	dmas = <&dmamux1 3 101 (STM32_DMA_PERIPH_TO_MEMORY | STM32_DMA_MEM_INC |
+		STM32_DMA_MEM_16BITS | STM32_DMA_PERIPH_16BITS)>;
+	dma-names = "rx";
+};
+
 &adc1 {
 	#address-cells = <1>;
 	#size-cells = <0>;
 
-	pinctrl-0 = <&adc1_inp15_pa3>;	/* PA5 */
+	pinctrl-0 = <&adc1_inp4_pc4>; /* opamp1 output */
 	pinctrl-names = "default";
 
 	st,adc-clock-source = <SYNC>;
@@ -125,12 +132,8 @@
 	vref-mv = <3300>;
 	status = "okay";
 
-	dmas = <&dmamux1 3 9 (STM32_DMA_PERIPH_TO_MEMORY | STM32_DMA_MEM_INC |
-		       STM32_DMA_MEM_16BITS | STM32_DMA_PERIPH_16BITS)>;
-	dma-names = "rx";
-
-	channel@13 {
-		reg = <15>;
+	channel@4 {
+		reg = <4>;
 		zephyr,gain = "ADC_GAIN_1";
 		zephyr,reference = "ADC_REF_INTERNAL";
 		zephyr,acquisition-time = <ADC_ACQ_TIME(ADC_ACQ_TIME_TICKS, 17)>;

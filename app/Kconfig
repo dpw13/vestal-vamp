@@ -1,0 +1,8 @@
+mainmenu "VV"
+
+source "Kconfig.zephyr"
+config VV_STM32
+     default y
+     bool
+     select USE_STM32_LL_OPAMP
+     select USE_STM32_HAL_DFSDM

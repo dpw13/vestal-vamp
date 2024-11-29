@@ -33,7 +33,8 @@ uint8_t dac_convert_cb(const struct device *dev, uint16_t sampling_index) {
 const static struct dac_channel_cfg dac_cfg = {
         .channel_id = 2, // Channel is 1-indexed
         .resolution = 12,
-        .buffered = true,
+        .internal = true,
+        .buffered = true, /* May not need buffer for internal-only connection? */
         .continuous = true,
         .callback = &dac_convert_cb,
         .buffer_base = &dac_buffer[0],
