@@ -1,11 +1,33 @@
 / {
 	chosen {
 		zephyr,code-partition = &boot_partition;
+		zephyr,boot-mode = &boot_mode0;
+		zephyr,bootloader-info = &boot_info0;
 	};
 	aliases {
 		mcuboot-button0 = &user_button;
 		mcuboot-led0 = &red_led;
     };
+};
+
+&backup_sram {
+	retainedmem0: retainedmem {
+		compatible = "zephyr,retained-ram";
+		status = "okay";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		boot_info0: retention@0 {
+			compatible = "zephyr,retention";
+			status = "okay";
+			reg = <0x00 0x100>;
+		};
+		boot_mode0: retention@100 {
+			compatible = "zephyr,retention";
+			status = "okay";
+			reg = <0x100 0x1>;
+		};
+	};
 };
 
 &flash0 {

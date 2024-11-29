@@ -43,3 +43,15 @@ We eventually may want to restructure the repo to make the top-level a zephyr wo
 and just the application the vv repo.
 
 #  ~/zephyr-sdk-0.17.0/arm-zephyr-eabi/bin/arm-zephyr-eabi-gdb build/app/zephyr/zephyr.elf
+
+# TODO Remaining
+- opamp (input and output)
+        - pga settings
+- FMAC (output upsampling)
+- DFSDM (input filtering)
+        - monitor extremes
+- ADC offset correction
+- DAC offset correction
+
+- optimization: CORDIC DMA for rect to polar in fft_dma and polar to rect in ifft_dma
+        - possibly vectorize some of the computation in ifft_dma (phase subtraction, scaling, interpolation)

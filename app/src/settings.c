@@ -2,12 +2,15 @@
 #include <zephyr/app_version.h>
 #include <zephyr/version.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/retention/blinfo.h>
 #include "settings.h"
 #include "audio.h"
 #include "freq_buffer.h"
 #include "timer.h"
 
 LOG_MODULE_REGISTER(vv_settings, LOG_LEVEL_INF);
+
+static char blinfo_version[64];
 
 const struct setting_top setting_top =
         START_TOP(3)
@@ -16,7 +19,8 @@ const struct setting_top setting_top =
                         FXP_SETTING("Time Shift", 1.0, VV_FLAG_LOG_SCALE, 1, 1, 8),
                         FXP_SETTING("Phase Reset Thresh", 0.001, VV_FLAG_LIN_SCALE, 1, 1, 16)
                 END_GROUP(),
-                START_RO_GROUP("Version", 2)
+                START_RO_GROUP("Version", 3)
+                        STR_SETTING("Bootloader", blinfo_version),
                         STR_SETTING("Zephyr", STRINGIFY(BUILD_VERSION)),
                         STR_SETTING("Application", APP_VERSION_STRING "-" STRINGIFY(APP_BUILD_VERSION))
                 END_GROUP(),
@@ -83,6 +87,9 @@ void print_setting(const struct setting *set) {
 }
 
 int settings_init(void) {
+	int len = blinfo_lookup(BLINFO_BOOTLOADER_VERSION_STR, blinfo_version, sizeof(blinfo_version));
+        LOG_INF("Read %d bytes of bootloader version", len);
+
         LOG_INF("Settings:");
         for (int i=0; i<setting_top.group_count; i++) {
                 const struct setting_grp *grp = &setting_top.group[i];
