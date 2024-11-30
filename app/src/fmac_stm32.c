@@ -1,5 +1,5 @@
 
-#define DT_DRV_COMPAT st_stm32_dfsdm
+#define DT_DRV_COMPAT st_stm32_fmac
 
 #include <zephyr/kernel.h>
 #include <soc.h>
@@ -13,10 +13,10 @@
 #include <zephyr/toolchain.h>
 
 #include <stm32_ll_dma.h>
-#include <stm32h7xx_hal_dfsdm.h>
-#include "dfsdm_stm32.h"
+#include <stm32h7xx_ll_fmac.h>
+#include "fmac_stm32.h"
 
-LOG_MODULE_REGISTER(dfsdm_stm32, LOG_LEVEL_INF);
+LOG_MODULE_REGISTER(fmac_stm32, LOG_LEVEL_INF);
 
 struct stream {
 	const struct device *dma_dev;
@@ -28,16 +28,29 @@ struct stream {
 	bool dst_addr_increment;
 };
 
-struct dfsdm_stm32_config {
+enum fmac_op {
+	FMAC_OP_CONV = 0,
+	FMAC_OP_IIR = 1,
+};
+
+struct fmac_stm32_config {
 	const struct stm32_pclken *pclken;
 	size_t pclk_len;
 	/* reset controller device configuration*/
 	const struct reset_dt_spec reset;
 };
 
-struct dfsdm_stm32_data {
-	DFSDM_Channel_HandleTypeDef channel;
-	DFSDM_Filter_HandleTypeDef filter;
+struct fmac_stm32_data {
+	FMAC_TypeDef *fmac;
+	enum fmac_op op;
+	uint8_t x1_wm;
+	uint8_t x1_size;
+	uint8_t x2_size;
+	uint8_t y_wm;
+	uint8_t y_size;
+	uint8_t lshift;
+
+	/* For now only sample input DMA is implemented. */
 	struct stream dma;
 	volatile int dma_error;
 
@@ -45,14 +58,14 @@ struct dfsdm_stm32_data {
 	size_t buffer_len;
 	bool continuous;
 
-	dfsdm_dma_callback callback;
+	fmac_dma_callback callback;
 };
 
 static void dma_callback(const struct device *dev, void *user_data,
 			 uint32_t channel, int status)
 {
-	/* user_data directly holds the dfsdm device */
-	struct dfsdm_stm32_data *data = user_data;
+	/* user_data directly holds the fmac device */
+	struct fmac_stm32_data *data = user_data;
 
 	if (channel == data->dma.channel) {
 		if (status >= 0) {
@@ -69,14 +82,14 @@ static void dma_callback(const struct device *dev, void *user_data,
 			if (data->continuous) {
 				/* In continuous mode, we simply continue to transfer data and call
 				* the callback. No need to stop/restart the DMA engine or even tell
-				* the dfsdm_context subsystem that the buffer is complete.
+				* the fmac_context subsystem that the buffer is complete.
 				*/
 				data->callback(dev, data->buffer, data->buffer_len);
 			} else {
 				/* Stop the DMA engine, only to start it again when the callback returns
-				* DFSDM_ACTION_REPEAT or DFSDM_ACTION_CONTINUE, or the number of samples
+				* FMAC_ACTION_REPEAT or FMAC_ACTION_CONTINUE, or the number of samples
 				* haven't been reached Starting the DMA engine is done
-				* within dfsdm_context_start_sampling
+				* within fmac_context_start_sampling
 				*/
 				dma_stop(data->dma.dma_dev, data->dma.channel);
 				/* No need to invalidate the cache because it's assumed that
@@ -87,23 +100,17 @@ static void dma_callback(const struct device *dev, void *user_data,
 		} else if (status < 0) {
 			LOG_ERR("DMA sampling complete, but DMA reported error %d", status);
 			data->dma_error = status;
-			HAL_DFSDM_FilterRegularStop(&data->filter);
+			LL_FMAC_DisableDMAReq_WRITE(data->fmac);
 			dma_stop(data->dma.dma_dev, data->dma.channel);
 			data->callback(dev, data->buffer, data->buffer_len);
-		}
-
-		if (data->filter.State == HAL_DFSDM_FILTER_STATE_ERROR) {
-			LOG_ERR("Filter reported error state: %d", data->filter.ErrorCode);
-			HAL_DFSDM_FilterRegularStop(&data->filter);
-			dma_stop(data->dma.dma_dev, data->dma.channel);
 		}
 	}
 }
 
-static int dfsdm_stm32_dma_start(const struct device *dev,
+static int fmac_stm32_dma_start(const struct device *dev,
 			       void *buffer, size_t buffer_len)
 {
-	struct dfsdm_stm32_data *data = dev->data;
+	struct fmac_stm32_data *data = dev->data;
 	struct dma_block_config *blk_cfg;
 	int ret;
 
@@ -120,12 +127,12 @@ static int dfsdm_stm32_dma_start(const struct device *dev,
 	/* Source and destination */
 
 	/* Use 16-bit access of LSB (add 2 for MSB) */
-	blk_cfg->source_address = (uint32_t)&data->filter.Instance->FLTJDATAR;
-	blk_cfg->source_addr_adj = DMA_ADDR_ADJ_NO_CHANGE;
+	blk_cfg->source_address = (uint32_t)buffer;
+	blk_cfg->source_addr_adj = DMA_ADDR_ADJ_INCREMENT;
 	blk_cfg->source_reload_en = 1;
 
-	blk_cfg->dest_address = (uint32_t)buffer;
-	blk_cfg->dest_addr_adj = DMA_ADDR_ADJ_INCREMENT;
+	blk_cfg->dest_address = (uint32_t)&data->fmac->WDATA;
+	blk_cfg->dest_addr_adj = DMA_ADDR_ADJ_NO_CHANGE;
 	blk_cfg->dest_reload_en = 1;
 
 	/* Manually set the FIFO threshold to 1/4 because the
@@ -162,27 +169,110 @@ static int dfsdm_stm32_dma_start(const struct device *dev,
 	return ret;
 }
 
-int dfsdm_stm32_start(const struct device *dev, void *buffer, size_t buffer_len, dfsdm_dma_callback cb) {
-	struct dfsdm_stm32_data *data = dev->data;
-	HAL_StatusTypeDef ret;
+int fmac_stm32_start(const struct device *dev, void *buffer, size_t buffer_len, fmac_dma_callback cb) {
+	struct fmac_stm32_data *data = dev->data;
 
 	data->buffer = buffer;
 	data->buffer_len = buffer_len;
 	data->callback = cb;
-	dfsdm_stm32_dma_start(dev, buffer, buffer_len);
+	fmac_stm32_dma_start(dev, buffer, buffer_len);
 
-	/* The next step is typically HAL_DFSDM_FilterRegularStart_DMA, but this just starts
-	 * the associated DMA and then runs DFSDM_RegConvStart(). */
+	/* Start DMA and enable DMA write request */
 	dma_start(data->dma.dma_dev, data->dma.channel);
-	ret = HAL_DFSDM_FilterRegularStart(&data->filter);
+	LL_FMAC_EnableDMAReq_WRITE(data->fmac);
+
+	/* Start processing */
+	if (data->op == FMAC_OP_CONV) {
+		LL_FMAC_ConfigFunc(data->fmac, LL_FMAC_PROCESSING_START, LL_FMAC_FUNC_CONVO_FIR, data->x2_size, data->lshift, 0);
+	} else {
+		LOG_ERR("IIR mode unimplemented");
+	}
+	return 0;
+}
+
+static int fmac_stm32_load_buf(const struct device *dev, uint32_t which, uint16_t *samples, size_t sample_count)
+{
+	struct fmac_stm32_data *data = dev->data;
+
+	LL_FMAC_ConfigFunc(data->fmac, LL_FMAC_PROCESSING_STOP, which, sample_count, 0, 0);
+	for (int i=0; i < sample_count; i++) {
+		data->fmac->WDATA = *samples++;
+	}
+	return 0;
+}
+
+static inline uint32_t fmac_stm32_samples_to_wm(uint8_t samples) {
+	switch (samples) {
+		case 1:
+			return LL_FMAC_WM_0_THRESHOLD_1;
+		case 2:
+			return LL_FMAC_WM_1_THRESHOLD_2;
+		case 4:
+			return LL_FMAC_WM_2_THRESHOLD_4;
+		case 8:
+			return LL_FMAC_WM_3_THRESHOLD_8;
+		default:
+			LOG_ERR("Invalid watermark value, assuming 2 samples");
+			return LL_FMAC_WM_1_THRESHOLD_2;
+	}
+}
+
+static int fmac_stm32_set_buffers(const struct device *dev) {
+	struct fmac_stm32_data *data = dev->data;
+	uint16_t offset = 0;
+
+	LL_FMAC_ConfigX1(data->fmac, offset, data->x1_size, fmac_stm32_samples_to_wm(data->x1_wm));
+	offset += data->x1_size;
+	LL_FMAC_ConfigX2(data->fmac, offset, data->x2_size);
+	offset += data->x2_size;
+	LL_FMAC_ConfigY(data->fmac, offset, data->y_size, fmac_stm32_samples_to_wm(data->y_wm));
+	offset += data->y_size;
+
+	if (offset > 256) {
+		LOG_ERR("Combined buffers greater than 256");
+		return -EINVAL;
+	}
 
 	return 0;
 }
 
-static int dfsdm_stm32_init(const struct device *dev)
+uint32_t fmac_stm32_get_output_reg(const struct device *dev) {
+	struct fmac_stm32_data *data = dev->data;
+	return (uint32_t)&data->fmac->RDATA;
+}
+
+int fmac_stm32_configure_fir(const struct device *dev, uint16_t *coeffs, uint8_t coeff_len) {
+	int ret;
+	struct fmac_stm32_data *data = dev->data;
+	/* Configure filter function
+	 * X1: sample data
+	 * X2: filter coeffs
+	 * Y: output samples
+	 */
+
+	data->x2_size = coeff_len;
+	ret = fmac_stm32_set_buffers(dev);
+	if (ret) {
+		LOG_ERR("Unable to configure buffers");
+		return ret;
+	}
+
+	/* TODO: Could use DMA here */
+	fmac_stm32_load_buf(dev, LL_FMAC_FUNC_LOAD_X2, coeffs, coeff_len);
+	if (ret) {
+		LOG_ERR("Unable to load coefficients");
+		return ret;
+	}
+
+	return 0;
+}
+
+/* TODO: IIR not implemented */
+
+static int fmac_stm32_init(const struct device *dev)
 {
-	struct dfsdm_stm32_data *data = dev->data;
-	const struct dfsdm_stm32_config *cfg = dev->config;
+	struct fmac_stm32_data *data = dev->data;
+	const struct fmac_stm32_config *cfg = dev->config;
 	HAL_StatusTypeDef ret;
 	int err;
 
@@ -195,7 +285,7 @@ static int dfsdm_stm32_init(const struct device *dev)
 	err = clock_control_on(DEVICE_DT_GET(STM32_CLOCK_CONTROL_NODE),
 			       (clock_control_subsys_t) &cfg->pclken[0]);
 	if (err < 0) {
-		LOG_ERR("Could not enable DFSDM clock");
+		LOG_ERR("Could not enable FMAC clock");
 		return err;
 	}
 
@@ -206,25 +296,13 @@ static int dfsdm_stm32_init(const struct device *dev)
 
 	ret = reset_line_toggle(cfg->reset.dev, cfg->reset.id);
 	if (ret != 0) {
-		LOG_ERR("DFSDM reset failed");
+		LOG_ERR("FMAC reset failed");
 		return ret;
 	}
 
-	ret = HAL_DFSDM_ChannelInit(&data->channel);
+	ret = LL_FMAC_Init(data->fmac);
 	if (ret != HAL_OK) {
-		LOG_ERR("Failed to initialize DFSDM filter channel");
-		return ret;
-	}
-
-	ret = HAL_DFSDM_FilterInit(&data->filter);
-	if (ret != HAL_OK) {
-		LOG_ERR("Failed to initialize DFSDM filter");
-		return ret;
-	}
-
-	ret = HAL_DFSDM_FilterConfigRegChannel(&data->filter, DFSDM_CHANNEL_0, DFSDM_CONTINUOUS_CONV_ON);
-	if (ret != HAL_OK) {
-		LOG_ERR("Failed to configure DFSDM filter");
+		LOG_ERR("Failed to initialize FMAC filter channel");
 		return ret;
 	}
 
@@ -233,7 +311,7 @@ static int dfsdm_stm32_init(const struct device *dev)
 	return 0;
 }
 
-#define DFSDM_DMA_CHANNEL_INIT(index, src_dev, dest_dev)					\
+#define FMAC_DMA_CHANNEL_INIT(index, src_dev, dest_dev)					\
 	.dma = {									\
 		.dma_dev = DEVICE_DT_GET(DT_INST_DMAS_CTLR_BY_IDX(index, 0)),		\
 		.channel = DT_INST_DMAS_CELL_BY_IDX(index, 0, channel),			\
@@ -246,7 +324,7 @@ static int dfsdm_stm32_init(const struct device *dev)
 			.dest_data_size = STM32_DMA_CONFIG_##dest_dev##_DATA_SIZE(	\
 				STM32_DMA_CHANNEL_CONFIG_BY_IDX(index, 0)),		\
 			.source_burst_length = 1,       /* SINGLE transfer */		\
-			.dest_burst_length = 4,         /* Burst transfer to mem */	\
+			.dest_burst_length = 1,         /* SINGLE transfer */	\
 			.channel_priority = STM32_DMA_CONFIG_PRIORITY(			\
 				STM32_DMA_CHANNEL_CONFIG_BY_IDX(index, 0)),		\
 			.dma_callback = dma_callback,					\
@@ -259,54 +337,34 @@ static int dfsdm_stm32_init(const struct device *dev)
 			STM32_DMA_CHANNEL_CONFIG_BY_IDX(index, 0)),			\
 	}
 
-#define STM32_DFSDM_INIT(id)							\
+#define STM32_FMAC_INIT(id)							\
 										\
 static const struct stm32_pclken pclken_##id[] =				\
 					       STM32_DT_INST_CLOCKS(id);	\
 										\
-static const struct dfsdm_stm32_config dfsdm_stm32_cfg_##id = {			\
+static const struct fmac_stm32_config fmac_stm32_cfg_##id = {			\
 	.pclken = pclken_##id,							\
 	.pclk_len = DT_INST_NUM_CLOCKS(id),					\
 	.reset = RESET_DT_SPEC_INST_GET(id),					\
 };										\
 										\
-static struct dfsdm_stm32_data dfsdm_stm32_data_##id = {			\
-	.channel = {								\
-		.Instance = (DFSDM_Channel_TypeDef  *) DT_INST_REG_ADDR_BY_NAME(id, channel), \
-		.Init = {							\
-			.Input = {						\
-				.Multiplexer = DFSDM_CHANNEL_ADC_OUTPUT,	\
-				.DataPacking = DFSDM_CHANNEL_STANDARD_MODE,     \
-				.Pins = DFSDM_CHANNEL_SAME_CHANNEL_PINS,	\
-			},							\
-			.Offset = 0,						\
-			.RightBitShift = 4,					\
-			.Awd = { .Oversampling = 1, },				\
-		},								\
-	},									\
-	.filter = {								\
-		.Instance = (DFSDM_Filter_TypeDef  *) DT_INST_REG_ADDR_BY_NAME(id, filter), \
-		.Init = {							\
-			.RegularParam = {					\
-				.Trigger = DFSDM_FILTER_SW_TRIGGER,		\
-				.FastMode = ENABLE,				\
-				.DmaMode = ENABLE,				\
-			},							\
-			.FilterParam = {					\
-				.IntOversampling = 1, /* Integrator bypass */	\
-				.Oversampling = 16,				\
-				.SincOrder = DFSDM_FILTER_SINC5_ORDER, /* Shrug? */ \
-			},							\
-		},								\
-	},									\
+static struct fmac_stm32_data fmac_stm32_data_##id = {				\
+	.fmac = (FMAC_TypeDef *)DT_INST_REG_ADDR(id), 						\
+	.op = FMAC_OP_CONV,							\
+	.x1_wm = DT_INST_PROP_OR(id, x1_wm, 2),					\
+	.x1_size = DT_INST_PROP_OR(id, x1_size, 4),				\
+	.x2_size = DT_INST_PROP_OR(id, x2_size, 248),				\
+	.y_wm = DT_INST_PROP_OR(id, y_wm, 2),					\
+	.y_size = DT_INST_PROP_OR(id, y_size, 4),				\
+	.lshift = DT_INST_PROP_OR(id, lshift, 0),				\
 	.continuous = true,							\
-	DFSDM_DMA_CHANNEL_INIT(id, PERIPHERAL, MEMORY)				\
+	FMAC_DMA_CHANNEL_INIT(id, MEMORY, PERIPHERAL)				\
 };										\
 										\
 DEVICE_DT_INST_DEFINE(id,							\
-		    &dfsdm_stm32_init, NULL,					\
-		    &dfsdm_stm32_data_##id, &dfsdm_stm32_cfg_##id,		\
-		    POST_KERNEL, CONFIG_ADC_INIT_PRIORITY,			\
+		    &fmac_stm32_init, NULL,					\
+		    &fmac_stm32_data_##id, &fmac_stm32_cfg_##id,		\
+		    POST_KERNEL, CONFIG_DAC_INIT_PRIORITY,			\
 		    NULL);
 
-DT_INST_FOREACH_STATUS_OKAY(STM32_DFSDM_INIT)
+DT_INST_FOREACH_STATUS_OKAY(STM32_FMAC_INIT)

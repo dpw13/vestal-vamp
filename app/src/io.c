@@ -150,8 +150,8 @@ static int get_io(void) {
 
 	if (ret < 0) {
 		LOG_ERR("SPI transceive error: %d", ret);
-	} else {
-		uint32_t *ptr = (uint32_t *const)&rxmsg[0];
+	//} else {
+		//uint32_t *ptr = (uint32_t *const)&rxmsg[0];
 		//LOG_INF("%08x %08x %08x %08x", ptr[0], ptr[1], ptr[2], ptr[3]);
 	}
 

@@ -65,6 +65,8 @@ int main(void)
 	//display_text(2, "---Line 2");
 	//display_text(3, "***Line 3");
 
+	k_msleep(500);
+
 	filter_start();
 	adc_start();
 	timer_start();

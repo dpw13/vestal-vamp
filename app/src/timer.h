@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 /* Internal */
-#define AUDIO_TIMER_HZ       48000
+#define AUDIO_TIMER_HZ       100
 
 int timer_init(void);
 int timer_start(void);
