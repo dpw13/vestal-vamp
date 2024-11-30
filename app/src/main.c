@@ -65,15 +65,14 @@ int main(void)
 	//display_text(2, "---Line 2");
 	//display_text(3, "***Line 3");
 
-	k_msleep(500);
+	k_msleep(100);
 
 	filter_start();
 	adc_start();
 	timer_start();
 
+	//k_msleep(100);
 	//timer_stop();
-
-	k_msleep(1000);
 
 	uint16_t i=0;
 	while (1) {

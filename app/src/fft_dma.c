@@ -13,7 +13,7 @@
 #include "freq_buffer.h"
 #include "math_support.h"
 
-LOG_MODULE_REGISTER(fft_dma, LOG_LEVEL_DBG);
+LOG_MODULE_REGISTER(fft_dma, LOG_LEVEL_INF);
 
 /* The buffer of real ADC samples. Align to cache line size. */
 /* There appears to be a bug somewhere that invaliding the data cache on

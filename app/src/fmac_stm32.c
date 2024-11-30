@@ -16,7 +16,7 @@
 #include <stm32h7xx_ll_fmac.h>
 #include "fmac_stm32.h"
 
-LOG_MODULE_REGISTER(fmac_stm32, LOG_LEVEL_INF);
+LOG_MODULE_REGISTER(fmac_stm32, LOG_LEVEL_DBG);
 
 struct stream {
 	const struct device *dma_dev;

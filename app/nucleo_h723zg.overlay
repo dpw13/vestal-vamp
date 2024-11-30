@@ -117,6 +117,20 @@
 	dmas = <&dmamux1 3 101 (STM32_DMA_PERIPH_TO_MEMORY | STM32_DMA_MEM_INC |
 		STM32_DMA_MEM_16BITS | STM32_DMA_PERIPH_16BITS)>;
 	dma-names = "rx";
+	status = "okay";
+};
+
+&fmac {
+	dmas = <&dmamux1 2 121 (STM32_DMA_MEMORY_TO_PERIPH | STM32_DMA_MEM_INC |
+		STM32_DMA_MEM_16BITS | STM32_DMA_PERIPH_16BITS)>;
+	dma-names = "tx";
+	status = "okay";
+
+	x1_wm = <2>;
+	x1_size = <4>;
+	y_wm = <2>;
+	y_size = <4>;
+	x2_size = <248>;
 };
 
 &adc1 {
@@ -154,7 +168,8 @@
 	pinctrl-names = "default";
 	status = "okay";
 
-	dmas = <&dmamux1 4 67 (STM32_DMA_MEMORY_TO_PERIPH | STM32_DMA_MEM_INC |
+	/* DMA to DAC consumes from FMAC output register. */
+	dmas = <&dmamux1 4 67 (STM32_DMA_MEMORY_TO_PERIPH |
 		       STM32_DMA_MEM_16BITS | STM32_DMA_PERIPH_16BITS)>;
 	dma-names = "tx";
 };
@@ -236,7 +251,7 @@
 };
 
 &timers6 {
-	st,prescaler = <16>;
+	st,prescaler = <32>;
 	status = "okay";
 
 	counter {

@@ -21,6 +21,7 @@ target_sources(app PRIVATE
         src/settings.c
 
         src/dfsdm_stm32.c
+        src/fmac_stm32.c
 )
 
 #zephyr_library_compile_options("-E")

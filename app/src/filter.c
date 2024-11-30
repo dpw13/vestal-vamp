@@ -7,7 +7,7 @@
 #include "ifft_dma.h"
 #include "audio.h"
 
-LOG_MODULE_REGISTER(filter, LOG_LEVEL_INF);
+LOG_MODULE_REGISTER(filter, LOG_LEVEL_DBG);
 
 static const struct device *const dfsdm_dev = DEVICE_DT_GET(DT_NODELABEL(dfsdm1));
 static const struct device *const fmac_dev = DEVICE_DT_GET(DT_NODELABEL(fmac));

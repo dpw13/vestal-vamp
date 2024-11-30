@@ -89,7 +89,7 @@ static void dma_callback(const struct device *dev, void *user_data,
 			data->dma_error = status;
 			HAL_DFSDM_FilterRegularStop(&data->filter);
 			dma_stop(data->dma.dma_dev, data->dma.channel);
-			data->callback(dev, data->buffer, data->buffer_len);
+			//data->callback(dev, data->buffer, data->buffer_len);
 		}
 
 		if (data->filter.State == HAL_DFSDM_FILTER_STATE_ERROR) {
@@ -120,7 +120,7 @@ static int dfsdm_stm32_dma_start(const struct device *dev,
 	/* Source and destination */
 
 	/* Use 16-bit access of LSB (add 2 for MSB) */
-	blk_cfg->source_address = (uint32_t)&data->filter.Instance->FLTJDATAR;
+	blk_cfg->source_address = (uint32_t)&data->filter.Instance->FLTRDATAR;
 	blk_cfg->source_addr_adj = DMA_ADDR_ADJ_NO_CHANGE;
 	blk_cfg->source_reload_en = 1;
 

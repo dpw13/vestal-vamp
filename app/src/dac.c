@@ -7,7 +7,7 @@
 #include "dac.h"
 #include "ifft_dma.h"
 
-LOG_MODULE_REGISTER(audio_dac, LOG_LEVEL_WRN);
+LOG_MODULE_REGISTER(audio_dac, LOG_LEVEL_DBG);
 
 static const struct device *const dac_dev = DEVICE_DT_GET(DT_NODELABEL(dac1));
 
@@ -21,7 +21,8 @@ static struct dac_channel_cfg dac_cfg = {
         .continuous = true,
         .callback = NULL,
         .buffer_base = NULL,
-        .buffer_size = 0,
+        .buffer_size = (1 << 15),
+        /* DAC is triggered by same timer as ADC */
         .trig_src = LL_DAC_TRIG_EXT_TIM6_TRGO,
 };
 
@@ -30,6 +31,7 @@ int dac_init(void) {
 
         sample_count = 0;
         dac_cfg.buffer_base = (void *)filter_get_dac_dma_addr();
+        LOG_DBG("Setting DAC DMA source address to %p", dac_cfg.buffer_base);
 
         ret = dac_channel_setup(dac_dev, &dac_cfg);
         if (ret < 0) {
