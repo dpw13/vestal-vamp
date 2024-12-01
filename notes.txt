@@ -42,7 +42,12 @@ $ west build -b nucleo_h723zg app
 We eventually may want to restructure the repo to make the top-level a zephyr workspace
 and just the application the vv repo.
 
-#  ~/zephyr-sdk-0.17.0/arm-zephyr-eabi/bin/arm-zephyr-eabi-gdb build/app/zephyr/zephyr.elf
+# cd app && openocd
+# ~/zephyr-sdk-0.17.0/arm-zephyr-eabi/bin/arm-zephyr-eabi-gdb build/app/zephyr/vv.elf
+(gdb) target extended-remote localhost:3333
+(gdb) monitor reset halt
+(gdb) load
+(gdb) continue
 
 # TODO Remaining
 - opamp (input and output)
@@ -55,3 +60,26 @@ and just the application the vv repo.
 
 - optimization: CORDIC DMA for rect to polar in fft_dma and polar to rect in ifft_dma
         - possibly vectorize some of the computation in ifft_dma (phase subtraction, scaling, interpolation)
+
+DMA allocation:
+        dma1.2: memory to FMAC
+        dma1.3: DFSDM to memory (fft_dma)
+        dma1.4: FMAC to DAC
+        dma1.5: audio_in_dma (fft_dma)
+
+dma1.4 count (DAC DMA):
+        devmem 40020074
+dma1.2 count (FMAC DMA)
+        devmem 40020044
+dac1.2 status:
+        devmem 40007434
+dac1.2 value:
+        devmem 40007430
+dac1.2 nx value:
+        devmem 40007418
+fmac status:
+        devmem 48024014
+fmac wdata:
+        devmem 48024018
+timer6 trig:
+        devmem 40001014 32 1

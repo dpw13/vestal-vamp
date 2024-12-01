@@ -16,7 +16,7 @@
 #include <stm32h7xx_ll_fmac.h>
 #include "fmac_stm32.h"
 
-LOG_MODULE_REGISTER(fmac_stm32, LOG_LEVEL_DBG);
+LOG_MODULE_REGISTER(fmac_stm32, LOG_LEVEL_INF);
 
 struct stream {
 	const struct device *dma_dev;
@@ -177,13 +177,22 @@ int fmac_stm32_start(const struct device *dev, void *buffer, size_t buffer_len, 
 	data->callback = cb;
 	fmac_stm32_dma_start(dev, buffer, buffer_len);
 
+	/* Enable overflow and underflow interrupts */
+	LL_FMAC_EnableIT_UNFL(data->fmac);
+	LL_FMAC_EnableIT_OVFL(data->fmac);
+
 	/* Start DMA and enable DMA write request */
 	dma_start(data->dma.dma_dev, data->dma.channel);
 	LL_FMAC_EnableDMAReq_WRITE(data->fmac);
 
 	/* Start processing */
+	if (LL_FMAC_IsEnabledStart(data->fmac)) {
+		LOG_ERR("FMAC started unexpectedly!");
+	}
 	if (data->op == FMAC_OP_CONV) {
 		LL_FMAC_ConfigFunc(data->fmac, LL_FMAC_PROCESSING_START, LL_FMAC_FUNC_CONVO_FIR, data->x2_size, data->lshift, 0);
+		while (!LL_FMAC_IsEnabledStart(data->fmac));
+		LOG_DBG("FMAC started");
 	} else {
 		LOG_ERR("IIR mode unimplemented");
 	}
@@ -194,9 +203,15 @@ static int fmac_stm32_load_buf(const struct device *dev, uint32_t which, uint16_
 {
 	struct fmac_stm32_data *data = dev->data;
 
-	LL_FMAC_ConfigFunc(data->fmac, LL_FMAC_PROCESSING_STOP, which, sample_count, 0, 0);
+	LL_FMAC_ConfigFunc(data->fmac, LL_FMAC_PROCESSING_START, which, sample_count, 0, 0);
+	while (!LL_FMAC_IsEnabledStart(data->fmac));
 	for (int i=0; i < sample_count; i++) {
 		data->fmac->WDATA = *samples++;
+	}
+	if (LL_FMAC_IsEnabledStart(data->fmac)) {
+		LOG_ERR("FMAC did not stop after loading buffer!");
+	} else {
+		LOG_DBG("FMAC buffer loaded");
 	}
 	return 0;
 }
@@ -221,11 +236,11 @@ static int fmac_stm32_set_buffers(const struct device *dev) {
 	struct fmac_stm32_data *data = dev->data;
 	uint16_t offset = 0;
 
-	LL_FMAC_ConfigX1(data->fmac, offset, data->x1_size, fmac_stm32_samples_to_wm(data->x1_wm));
+	LL_FMAC_ConfigX1(data->fmac, fmac_stm32_samples_to_wm(data->x1_wm), offset, data->x1_size);
 	offset += data->x1_size;
 	LL_FMAC_ConfigX2(data->fmac, offset, data->x2_size);
 	offset += data->x2_size;
-	LL_FMAC_ConfigY(data->fmac, offset, data->y_size, fmac_stm32_samples_to_wm(data->y_wm));
+	LL_FMAC_ConfigY(data->fmac, fmac_stm32_samples_to_wm(data->y_wm), offset, data->y_size);
 	offset += data->y_size;
 
 	if (offset > 256) {
@@ -306,7 +321,7 @@ static int fmac_stm32_init(const struct device *dev)
 		return ret;
 	}
 
-	LOG_INF("%s: init complete", dev->name);
+	LOG_DBG("%s: init complete", dev->name);
 
 	return 0;
 }

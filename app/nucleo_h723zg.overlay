@@ -126,11 +126,11 @@
 	dma-names = "tx";
 	status = "okay";
 
-	x1_wm = <2>;
-	x1_size = <4>;
-	y_wm = <2>;
+	x1_wm = <1>;
+	x1_size = <20>;
+	y_wm = <1>;
 	y_size = <4>;
-	x2_size = <248>;
+	x2_size = <16>;
 };
 
 &adc1 {
@@ -168,8 +168,10 @@
 	pinctrl-names = "default";
 	status = "okay";
 
-	/* DMA to DAC consumes from FMAC output register. */
-	dmas = <&dmamux1 4 67 (STM32_DMA_MEMORY_TO_PERIPH |
+	/* DMA to DAC consumes from FMAC output register.
+	 * 67 = dac1ch1, 68 = dac1ch2
+	 */
+	dmas = <&dmamux1 4 68 (STM32_DMA_MEMORY_TO_PERIPH |
 		       STM32_DMA_MEM_16BITS | STM32_DMA_PERIPH_16BITS)>;
 	dma-names = "tx";
 };

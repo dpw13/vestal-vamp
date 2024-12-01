@@ -7,7 +7,7 @@
 #include "ifft_dma.h"
 #include "audio.h"
 
-LOG_MODULE_REGISTER(filter, LOG_LEVEL_DBG);
+LOG_MODULE_REGISTER(filter, LOG_LEVEL_INF);
 
 static const struct device *const dfsdm_dev = DEVICE_DT_GET(DT_NODELABEL(dfsdm1));
 static const struct device *const fmac_dev = DEVICE_DT_GET(DT_NODELABEL(fmac));
@@ -59,7 +59,10 @@ uint32_t filter_get_dac_dma_addr(void) {
 
 int filter_gen_fir(void) {
 	/* TODO: actual coefficients */
-	uint16_t buf[16] = {0};
+	uint16_t buf[16];
+	for (int i = 0; i < ARRAY_SIZE(buf); i++) {
+		buf[i] = i;
+	}
 	return fmac_stm32_configure_fir(fmac_dev, &buf[0], ARRAY_SIZE(buf));
 }
 
