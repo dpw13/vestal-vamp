@@ -70,7 +70,7 @@ static void dma_callback(const struct device *dev, void *user_data,
 
 	if (channel == data->dma.channel) {
 		if (status >= 0) {
-			LOG_DBG("status %d at %d samples", status, data->buffer_len);
+			LOG_DBG("status %d", status);
 			data->callback(dev, status);
 			if (!data->continuous) {
 				/* Stop the DMA engine, only to start it again when the callback returns

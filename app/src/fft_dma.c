@@ -19,7 +19,7 @@ LOG_MODULE_REGISTER(fft_dma, LOG_LEVEL_INF);
 /* There appears to be a bug somewhere that invaliding the data cache on
  * an unaligned value causes corruption of memory after this buffer.
  */
-static audio_raw_t fft_buffer[FFT_SIZE] __attribute__ ((aligned (32)));
+static audio_raw_t fft_td_buffer[FFT_SIZE] __attribute__ ((aligned (32)));
 
 static void fft_dma_callback(const struct device *dev, void *user_data, uint32_t channel, int status);
 
@@ -40,7 +40,7 @@ static struct dma_def fft_dma_def = {
 		.source_addr_adj = DMA_ADDR_ADJ_INCREMENT,
 		.source_reload_en = 0,
 
-		.dest_address = (uint32_t)&fft_buffer[0],
+		.dest_address = (uint32_t)&fft_td_buffer[0],
 		.dest_addr_adj = DMA_ADDR_ADJ_INCREMENT,
 		.dest_reload_en = 0,
 
@@ -82,7 +82,7 @@ struct inst_seq {
  */
 #define SEQ_INST(src_ival, dst_ival, len_ival, _fft_ready, _dma_ready) { \
 	.dma_src = (uint32_t)&adc_buffer[(src_ival)*OVERLAP_SAMPLES], \
-	.dma_dst = (uint32_t)&fft_buffer[(dst_ival)*OVERLAP_SAMPLES], \
+	.dma_dst = (uint32_t)&fft_td_buffer[(dst_ival)*OVERLAP_SAMPLES], \
 	.dma_len = sizeof(uint16_t)*(len_ival)*OVERLAP_SAMPLES, \
 	.fft_ready = _fft_ready, \
 	.dma_ready = _dma_ready, \
@@ -153,8 +153,9 @@ static void window_done(void) {
 	}
 }
 
-/* A buffer to hold the raw complex frequency phasors. */
-static q15_t fft_cmplx_result[2*FFT_SIZE]  __attribute__ ((aligned (32)));
+/* A buffer to hold the raw complex frequency phasors. Note that the 
+ * algorithm requires an extra bin for DC/Nyquist frequencies. */
+static q15_t fft_fd_samples[2*FFT_SIZE+2]  __attribute__ ((aligned (32)));
 
 static uint8_t fft_lcl_idx;
 
@@ -187,11 +188,16 @@ static uint8_t fft_lcl_idx;
  */
 void precalc_polar_diff(struct polar_freq_data *dst) {
 	/* Compute magnitude */
-	arm_cmplx_mag_fast_q15(&fft_cmplx_result[0], &dst->mag[0], FFT_SIZE);
-	/* Instantaneous phase */
-	q15_t *cmplx_src = &fft_cmplx_result[0];
-	q15_t *dst_ptr = &dst->phase[0];
-	for (int i=0; i<FFT_SIZE; i++) {
+	arm_cmplx_mag_fast_q15(&fft_fd_samples[0], &dst->mag[0], FFT_SIZE);
+
+	/* Pack real Nyquist value into phase[0] */
+	dst->phase[0] = fft_fd_samples[2*FFT_SIZE];
+
+	/* Instantaneous phase. Only calculate for bins > 0, as 0 contains
+	 * the DC and Nyquist real values. */
+	q15_t *cmplx_src = &fft_fd_samples[1];
+	q15_t *dst_ptr = &dst->phase[1];
+	for (int i=1; i<FFT_SIZE; i++) {
 		if (arm_atan2_q15(cmplx_src[1], cmplx_src[0], dst_ptr) != ARM_MATH_SUCCESS) {
 			/* Reset phase if the complex source is zero */
 			*dst_ptr = 0;
@@ -210,12 +216,14 @@ q15_t fft_window_func[FFT_SIZE] __attribute__ ((aligned (32)));
 /* Work handler to process display updates */
 void fft_work_handler(struct k_work *work) {
 	//LOG_DBG("Window start");
-	/* Invalidate cache; the waveform present in fft_buffer is new. */
-	sys_cache_data_invd_range(&fft_buffer[0], sizeof(audio_raw_t)*FFT_SIZE);
+	/* Invalidate cache; the waveform present in fft_td_buffer is new. */
+	sys_cache_data_invd_range(&fft_td_buffer[0], sizeof(audio_raw_t)*FFT_SIZE);
 	/* Apply window in-place to ADC samples */
-	arm_mult_q15(&fft_window_func[0], &fft_buffer[0], &fft_buffer[0], FFT_SIZE);
+	arm_mult_q15(&fft_window_func[0], &fft_td_buffer[0], &fft_td_buffer[0], FFT_SIZE);
 	LOG_DBG("FFT start");
-        arm_rfft_q15(&S, (q15_t *)&fft_buffer[0], &fft_cmplx_result[0]);
+        arm_rfft_q15(&S, (q15_t *)&fft_td_buffer[0], &fft_fd_samples[0]);
+	/* Re-pack Nyquist into imaginary DC bin */
+	fft_fd_samples[1] = fft_fd_samples[2*FFT_SIZE];
 	/* I assume we can write directly to the destination buffer. This may need to
 	 * be an additional DMA instead. */
 	precalc_polar_diff(&lt_buffer[wr_idx]);

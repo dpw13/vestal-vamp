@@ -136,7 +136,7 @@
 	y_size = <4>;
 	x2_size = <124>;
 
-	lshift = <1>;
+	lshift = <0>;
 	clip;
 };
 

@@ -16,23 +16,27 @@ static const struct device *const dfsdm_dev = DEVICE_DT_GET(DT_NODELABEL(dfsdm1)
 static const struct device *const fmac_dev = DEVICE_DT_GET(DT_NODELABEL(fmac));
 
 /* The ADC raw sample buffer */
-audio_raw_t adc_buffer[FFT_SIZE*2] __attribute__((__section__("SRAM4")));
-audio_raw_t dac_buffer[FFT_SIZE*2] __attribute__((__section__("SRAM4")));
+audio_raw_t adc_buffer[FFT_SIZE*2] __attribute__((__section__("SRAM4"))) __attribute__ ((aligned (32)));;
+/* The "DAC buffer" holds the uninterpolated DAC samples. We zero-pad
+ * these values before DMA so this buffer doesn't need to be in SRAM4.
+ */
+audio_raw_t dac_buffer[FFT_SIZE*2] __attribute__ ((aligned (32)));;
 
-uint16_t upsample_buffer[2048] = {0};
+uint16_t upsample_buffer[4096] __attribute__((__section__("SRAM4"))) __attribute__ ((aligned (32)));;
 
 /* Calculate the number of DAC samples copied into the upsample buffer for each
  * half-transfer
  */
-#define UPSAMPLE_SRC_SAMPLES	(ARRAY_SIZE(dac_buffer)/(2*AUDIO_OVERSAMPLE))
+#define UPSAMPLE_SRC_SAMPLES	(ARRAY_SIZE(upsample_buffer)/(2*AUDIO_OVERSAMPLE))
 #define UPSAMPLE_HALF_BUF	(ARRAY_SIZE(upsample_buffer)/2)
 
 /* TODO: move to stats */
-static uint32_t sample_count;
+static uint32_t dfsdm_sample_count;
+static uint32_t fmac_sample_count;
 static uint16_t dac_sample_idx;
 
 static int dfsdm_cb(const struct device *dev, int status) {
-	sample_count += FFT_SIZE;
+	dfsdm_sample_count += FFT_SIZE;
 	LOG_DBG("dfsdm_cb");
 
 	/* By the time we execute, the previous buffer is already being overwritten. We
@@ -54,36 +58,36 @@ static int dfsdm_cb(const struct device *dev, int status) {
 	return 0;
 }
 
+uint8_t ping_pong_idx;
+
 static int fmac_cb(const struct device *dev, int status) {
-	sample_count += FFT_SIZE;
-	LOG_DBG("fmac_cb");
+	fmac_sample_count += UPSAMPLE_SRC_SAMPLES;
 
 	/* Copy DAC samples into upsampling buffer */
 	uint16_t *src = (uint16_t *)&dac_buffer[dac_sample_idx];
 	uint16_t *dst;
 
 	/* TODO: bookkeeping */
-	if (status == DMA_STATUS_BLOCK) {
-		/* First half of upsample buffer */
-		claim_dac_samples(&dac_buffer[0], FFT_SIZE);
-		dst = &upsample_buffer[0];
-	} else if (status == DMA_STATUS_COMPLETE) {
-                /* Second half of upsample buffer */
-		claim_dac_samples(&dac_buffer[FFT_SIZE], FFT_SIZE);
-		dst = &upsample_buffer[UPSAMPLE_HALF_BUF];
-	} else {
-		LOG_ERR("DMA error %d", status);
-		return 1;
-	}
+	claim_dac_samples(&dac_buffer[dac_sample_idx], UPSAMPLE_SRC_SAMPLES);
+	dst = ping_pong_idx == 0 ? &upsample_buffer[0] : &upsample_buffer[UPSAMPLE_HALF_BUF];
+
+	LOG_DBG("fmac_cb %d %p->%p", status, src, dst);
 
 	/* The upsample buffer is already filled with zeros, so just copy
 	 * non-zero samples.
 	 */
 	for (uint16_t i = 0; i < UPSAMPLE_SRC_SAMPLES; i++) {
+		/* We need to convert from a signed, bipolar representation to an
+		 * unsigned, unipolar representation. This is because the DAC interprets
+		 * its samples as unsigned, and there appears to be no good way to convert
+		 * the data between the FMAC and the DAC (and the DAC provides no easy
+		 * offset configuration). */
 		*dst = (0x8000 ^ *src++) >> 1;
 		dst += AUDIO_OVERSAMPLE;
 	}
+
 	dac_sample_idx = (dac_sample_idx + UPSAMPLE_SRC_SAMPLES) % ARRAY_SIZE(dac_buffer);
+	ping_pong_idx = !ping_pong_idx;
 
 	return 0;
 }
@@ -142,6 +146,8 @@ int filter_start(void) {
 	//for (int i=0; i<ARRAY_SIZE(upsample_buffer); i++) {
 	//	upsample_buffer[i] = 0x8000;
 	//}
+	memset(&upsample_buffer[0], 0, sizeof(upsample_buffer));
+	ping_pong_idx = 0;
 
 	ret = filter_gen_fir();
 	if (ret) {
@@ -149,13 +155,15 @@ int filter_start(void) {
 		return ret;
 	}
 
-	ret = fmac_stm32_start(fmac_dev, &upsample_buffer[0], 2*FFT_SIZE, fmac_cb);
+	/* Note that the buffer length is in bytes, not words */
+	ret = fmac_stm32_start(fmac_dev, &upsample_buffer[0], sizeof(upsample_buffer), fmac_cb);
 	if (ret) {
 		LOG_ERR("Failed to start FMAC");
 		return ret;
 	}
 
-	ret = dfsdm_stm32_start(dfsdm_dev, &adc_buffer[0], FFT_SIZE*2*sizeof(audio_raw_t), dfsdm_cb);
+	/* Same here, buffer length in bytes */
+	ret = dfsdm_stm32_start(dfsdm_dev, &adc_buffer[0], sizeof(adc_buffer), dfsdm_cb);
 	if (ret) {
 		LOG_ERR("Failed to start DFSDM");
 		return ret;
@@ -165,10 +173,10 @@ int filter_start(void) {
 }
 
 int filter_stats(void) {
-	LOG_INF("%s: %d samples: %"PRId16":%"PRId16, dfsdm_dev->name,
-		sample_count,
-		adc_buffer[0],
-		adc_buffer[FFT_SIZE*2 - 1]);
+	LOG_INF("%s: %d samples", dfsdm_dev->name,
+		dfsdm_sample_count);
+	LOG_INF("%s: %d samples", fmac_dev->name,
+		fmac_sample_count);
 
 	return 0;
 }
