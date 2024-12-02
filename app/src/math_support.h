@@ -12,6 +12,10 @@ static inline q15_t arm_float_to_q15_once(float32_t in) {
 	return (q15_t) __SSAT((q31_t) (in * 32768.0f), 16);
 }
 
+static inline q15_t arm_float_to_q15_once_round(float32_t in) {
+	return (q15_t) __SSAT((q31_t) (in * 32768.0f + 0.5f), 16);
+}
+
 /* Copied from arm_float_to_q31 and adapted to a single value */
 static inline q15_t arm_float_to_q31_once(float32_t in) {
         return clip_q63_to_q31((q63_t) (in * 2147483648.0f));

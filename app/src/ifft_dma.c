@@ -188,8 +188,8 @@ static void accum_ifft_output(void) {
                 idx = (idx + 1) & (2*INV_OVERLAP - 1);
         }
         /* Overwrite last sequence of samples. This could be DMA. */
-        memcpy(&ifft_raw_buffer[i*OVERLAP_SAMPLES],
-                &dac_buffer[idx*OVERLAP_SAMPLES],
+        memcpy(&dac_buffer[idx*OVERLAP_SAMPLES],
+                &ifft_raw_buffer[i*OVERLAP_SAMPLES],
                 sizeof(audio_raw_t)*OVERLAP_SAMPLES);
 
         /* Increment active window */

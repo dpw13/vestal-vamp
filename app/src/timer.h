@@ -3,9 +3,6 @@
 
 #include <stdint.h>
 
-/* Internal */
-#define AUDIO_TIMER_HZ       16000
-
 int timer_init(void);
 int timer_start(void);
 int timer_stop(void);

@@ -57,6 +57,7 @@ struct fmac_stm32_data {
 	uint8_t *buffer;
 	size_t buffer_len;
 	bool continuous;
+	bool clip;
 
 	fmac_dma_callback callback;
 };
@@ -69,40 +70,21 @@ static void dma_callback(const struct device *dev, void *user_data,
 
 	if (channel == data->dma.channel) {
 		if (status >= 0) {
-			if (data->continuous) {
-				/* Half buffer complete in cyclic mode */
-				data->buffer_len += data->buffer_len/2;
-				data->buffer += data->buffer_len/2;
-			} else {
-				/* Full buffer complete */
-				data->buffer_len += data->buffer_len/2;
-				data->buffer += data->buffer_len;
-			}
 			LOG_DBG("status %d at %d samples", status, data->buffer_len);
-			if (data->continuous) {
-				/* In continuous mode, we simply continue to transfer data and call
-				* the callback. No need to stop/restart the DMA engine or even tell
-				* the fmac_context subsystem that the buffer is complete.
-				*/
-				data->callback(dev, data->buffer, data->buffer_len);
-			} else {
+			data->callback(dev, status);
+			if (!data->continuous) {
 				/* Stop the DMA engine, only to start it again when the callback returns
 				* FMAC_ACTION_REPEAT or FMAC_ACTION_CONTINUE, or the number of samples
 				* haven't been reached Starting the DMA engine is done
 				* within fmac_context_start_sampling
 				*/
-				dma_stop(data->dma.dma_dev, data->dma.channel);
-				/* No need to invalidate the cache because it's assumed that
-				* the address is in a non-cacheable SRAM region.
-				*/
-				data->callback(dev, data->buffer, data->buffer_len);
 			}
 		} else if (status < 0) {
 			LOG_ERR("DMA sampling complete, but DMA reported error %d", status);
 			data->dma_error = status;
 			LL_FMAC_DisableDMAReq_WRITE(data->fmac);
 			dma_stop(data->dma.dma_dev, data->dma.channel);
-			data->callback(dev, data->buffer, data->buffer_len);
+			data->callback(dev, status);
 		}
 	}
 }
@@ -190,7 +172,7 @@ int fmac_stm32_start(const struct device *dev, void *buffer, size_t buffer_len, 
 		LOG_ERR("FMAC started unexpectedly!");
 	}
 	if (data->op == FMAC_OP_CONV) {
-		LL_FMAC_ConfigFunc(data->fmac, LL_FMAC_PROCESSING_START, LL_FMAC_FUNC_CONVO_FIR, data->x2_size, data->lshift, 0);
+		LL_FMAC_ConfigFunc(data->fmac, LL_FMAC_PROCESSING_START, LL_FMAC_FUNC_CONVO_FIR, data->x2_size, 0, data->lshift);
 		while (!LL_FMAC_IsEnabledStart(data->fmac));
 		LOG_DBG("FMAC started");
 	} else {
@@ -256,7 +238,7 @@ uint32_t fmac_stm32_get_output_reg(const struct device *dev) {
 	return (uint32_t)&data->fmac->RDATA;
 }
 
-int fmac_stm32_configure_fir(const struct device *dev, uint16_t *coeffs, uint8_t coeff_len) {
+int fmac_stm32_configure_fir(const struct device *dev, int16_t *coeffs, uint8_t coeff_len) {
 	int ret;
 	struct fmac_stm32_data *data = dev->data;
 	/* Configure filter function
@@ -364,15 +346,16 @@ static const struct fmac_stm32_config fmac_stm32_cfg_##id = {			\
 };										\
 										\
 static struct fmac_stm32_data fmac_stm32_data_##id = {				\
-	.fmac = (FMAC_TypeDef *)DT_INST_REG_ADDR(id), 						\
+	.fmac = (FMAC_TypeDef *)DT_INST_REG_ADDR(id), 				\
 	.op = FMAC_OP_CONV,							\
-	.x1_wm = DT_INST_PROP_OR(id, x1_wm, 2),					\
+	.x1_wm = DT_INST_PROP_OR(id, x1_wm, 1),					\
 	.x1_size = DT_INST_PROP_OR(id, x1_size, 4),				\
 	.x2_size = DT_INST_PROP_OR(id, x2_size, 248),				\
-	.y_wm = DT_INST_PROP_OR(id, y_wm, 2),					\
+	.y_wm = DT_INST_PROP_OR(id, y_wm, 1),					\
 	.y_size = DT_INST_PROP_OR(id, y_size, 4),				\
 	.lshift = DT_INST_PROP_OR(id, lshift, 0),				\
 	.continuous = true,							\
+	.clip = DT_INST_PROP_OR(id, clip, 1),					\
 	FMAC_DMA_CHANNEL_INIT(id, MEMORY, PERIPHERAL)				\
 };										\
 										\

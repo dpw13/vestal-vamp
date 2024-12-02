@@ -24,8 +24,9 @@ const struct setting_top setting_top =
                         STR_SETTING("Zephyr", STRINGIFY(BUILD_VERSION)),
                         STR_SETTING("Application", APP_VERSION_STRING "-" STRINGIFY(APP_BUILD_VERSION))
                 END_GROUP(),
-                START_RO_GROUP("Build Opts", 4)
+                START_RO_GROUP("Build Opts", 5)
                         INT_SETTING_RO("Sample Rate (Hz)", AUDIO_TIMER_HZ),
+                        INT_SETTING_RO("Oversampling", AUDIO_OVERSAMPLE),
                         INT_SETTING_RO("FFT Size", FFT_SIZE),
                         INT_SETTING_RO("Overlap (%)", (100 - 100/INV_OVERLAP)),
                         INT_SETTING_RO("Window Count", WINDOW_COUNT)

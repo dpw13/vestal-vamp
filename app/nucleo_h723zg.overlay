@@ -113,11 +113,14 @@
 };
 
 &dfsdm1 {
-	/* This DMA is actually pointed at the DFSDM filter rather than ADC1 */
 	dmas = <&dmamux1 3 101 (STM32_DMA_PERIPH_TO_MEMORY | STM32_DMA_MEM_INC |
 		STM32_DMA_MEM_16BITS | STM32_DMA_PERIPH_16BITS)>;
 	dma-names = "rx";
 	status = "okay";
+
+	sinc_order = <5>;
+	intg_oversample = <1>;
+	sinc_oversample = <16>;
 };
 
 &fmac {
@@ -126,11 +129,15 @@
 	dma-names = "tx";
 	status = "okay";
 
+	/* The below need to match the oversampling ratio in audio.h! */
 	x1_wm = <1>;
-	x1_size = <20>;
+	x1_size = <128>;
 	y_wm = <1>;
 	y_size = <4>;
-	x2_size = <16>;
+	x2_size = <124>;
+
+	lshift = <1>;
+	clip;
 };
 
 &adc1 {
@@ -253,7 +260,7 @@
 };
 
 &timers6 {
-	st,prescaler = <32>;
+	st,prescaler = <0>;
 	status = "okay";
 
 	counter {

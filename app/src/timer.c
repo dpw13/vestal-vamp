@@ -1,9 +1,12 @@
 #include <zephyr/drivers/counter.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include "audio.h"
 #include "timer.h"
 
 LOG_MODULE_REGISTER(audio_timer);
+
+#define TIMER_FREQ_HZ (AUDIO_TIMER_HZ*AUDIO_OVERSAMPLE)
 
 #define TIMER_NODE      DT_NODELABEL(timers6)
 const struct device *const counter_dev = DEVICE_DT_GET(DT_CHILD(TIMER_NODE, counter));
@@ -17,7 +20,7 @@ int timer_init(void) {
 	}
 
         uint32_t freq = counter_get_frequency(counter_dev);
-        uint32_t ticks = freq/AUDIO_TIMER_HZ;
+        uint32_t ticks = freq/TIMER_FREQ_HZ;
         uint32_t actual = freq/ticks;
 
         struct counter_top_cfg counter_top_cfg = {

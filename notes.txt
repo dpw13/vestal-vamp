@@ -35,6 +35,8 @@ per buffer (given 50% overlap). Can we even detect an overflow?
 
 $ ./venv/bin/activate
 $ west build -b nucleo_h723zg app
+$ west flash
+$ microcom -p /dev/ttyACM0 -s 115200
 
 > usbipd bind -i 0483:374e
 > usbipd attach -a -w -i 0483:374e
@@ -83,3 +85,13 @@ fmac wdata:
         devmem 48024018
 timer6 trig:
         devmem 40001014 32 1
+
+With a dac_buffer value of 0x0010 and FMAC left shift of 6, we see (what appears to be) the minimum LSB of the DAC. This
+may be affected by being so near the negative rail. This is all with 16x oversampling with a single FMAC coeff of 0x7FFF.
+With lshift = 2, 0x4000 in the DAC buffer gives full-scale, which makes sense and should produce a single LSB of
+saturation in the FMAC, though we see no saturation bit set. The saturation bit appears to only set during accumulation
+and not when converting to s16 in the output stage (and/or does not include the left-shift). lshift of 10 does not set
+the saturation bit.
+
+lshift of 0, a single coeff of 0x7FFF, and an FMAC input sample of 0x7F00 produces a half-scale DAC sample. This seems
+like what we want, barring scaling due to the window function.

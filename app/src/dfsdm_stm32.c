@@ -35,6 +35,15 @@ struct dfsdm_stm32_config {
 	const struct reset_dt_spec reset;
 };
 
+enum sinc_order_t {
+	SINC_FASTSINC = 0,
+	SINC_SINC1,
+	SINC_SINC2,
+	SINC_SINC3,
+	SINC_SINC4,
+	SINC_SINC5,
+};
+
 struct dfsdm_stm32_data {
 	DFSDM_Channel_HandleTypeDef channel;
 	DFSDM_Filter_HandleTypeDef filter;
@@ -44,6 +53,11 @@ struct dfsdm_stm32_data {
 	uint8_t *buffer;
 	size_t buffer_len;
 	bool continuous;
+
+	/* Filter configuration from DT */
+	enum sinc_order_t sinc_order;
+	uint16_t sinc_oversample;
+	uint16_t intg_oversample;
 
 	dfsdm_dma_callback callback;
 };
@@ -56,40 +70,22 @@ static void dma_callback(const struct device *dev, void *user_data,
 
 	if (channel == data->dma.channel) {
 		if (status >= 0) {
-			if (data->continuous) {
-				/* Half buffer complete in cyclic mode */
-				data->buffer_len += data->buffer_len/2;
-				data->buffer += data->buffer_len/2;
-			} else {
-				/* Full buffer complete */
-				data->buffer_len += data->buffer_len/2;
-				data->buffer += data->buffer_len;
-			}
 			LOG_DBG("status %d at %d samples", status, data->buffer_len);
-			if (data->continuous) {
-				/* In continuous mode, we simply continue to transfer data and call
-				* the callback. No need to stop/restart the DMA engine or even tell
-				* the dfsdm_context subsystem that the buffer is complete.
-				*/
-				data->callback(dev, data->buffer, data->buffer_len);
-			} else {
+			data->callback(dev, status);
+			if (!data->continuous) {
 				/* Stop the DMA engine, only to start it again when the callback returns
 				* DFSDM_ACTION_REPEAT or DFSDM_ACTION_CONTINUE, or the number of samples
 				* haven't been reached Starting the DMA engine is done
 				* within dfsdm_context_start_sampling
 				*/
 				dma_stop(data->dma.dma_dev, data->dma.channel);
-				/* No need to invalidate the cache because it's assumed that
-				* the address is in a non-cacheable SRAM region.
-				*/
-				data->callback(dev, data->buffer, data->buffer_len);
 			}
 		} else if (status < 0) {
 			LOG_ERR("DMA sampling complete, but DMA reported error %d", status);
 			data->dma_error = status;
 			HAL_DFSDM_FilterRegularStop(&data->filter);
 			dma_stop(data->dma.dma_dev, data->dma.channel);
-			//data->callback(dev, data->buffer, data->buffer_len);
+			data->callback(dev, status);
 		}
 
 		if (data->filter.State == HAL_DFSDM_FILTER_STATE_ERROR) {
@@ -216,6 +212,9 @@ static int dfsdm_stm32_init(const struct device *dev)
 		return ret;
 	}
 
+	data->filter.Init.FilterParam.IntOversampling = data->intg_oversample;
+	data->filter.Init.FilterParam.Oversampling = data->sinc_oversample;
+	data->filter.Init.FilterParam.SincOrder = data->sinc_order << DFSDM_FLTFCR_FORD_Pos;
 	ret = HAL_DFSDM_FilterInit(&data->filter);
 	if (ret != HAL_OK) {
 		LOG_ERR("Failed to initialize DFSDM filter");
@@ -300,6 +299,9 @@ static struct dfsdm_stm32_data dfsdm_stm32_data_##id = {			\
 		},								\
 	},									\
 	.continuous = true,							\
+	.sinc_order = DT_INST_PROP_OR(id, sinc_order, 3),			\
+	.sinc_oversample = DT_INST_PROP_OR(id, sinc_oversample, 16),		\
+	.intg_oversample = DT_INST_PROP_OR(id, intg_oversample, 1),		\
 	DFSDM_DMA_CHANNEL_INIT(id, PERIPHERAL, MEMORY)				\
 };										\
 										\

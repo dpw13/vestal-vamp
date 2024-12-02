@@ -30,6 +30,7 @@ int dac_init(void) {
         int ret;
 
         sample_count = 0;
+        /* Use FMAC read register for DMA source address */
         dac_cfg.buffer_base = (void *)filter_get_dac_dma_addr();
         LOG_DBG("Setting DAC DMA source address to %p", dac_cfg.buffer_base);
 

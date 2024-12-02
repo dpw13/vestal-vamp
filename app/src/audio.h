@@ -3,6 +3,9 @@
 
 #include <stdint.h>
 
+#define AUDIO_TIMER_HZ          48000
+#define AUDIO_OVERSAMPLE        16
+
 /**
  * The size of the FFT in real samples.
  */
@@ -25,6 +28,6 @@
  */
 #define OVERLAP_SAMPLES	(FFT_SIZE/INV_OVERLAP)
 
-typedef uint16_t audio_raw_t;
+typedef int16_t audio_raw_t;
 
 #endif /* __AUDIO_H__ */
