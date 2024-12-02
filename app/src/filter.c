@@ -110,6 +110,10 @@ static inline float blackman_window(float phase) {
 	return 0.42f + (0.5f * cosf(phase)) + (0.08f * cosf(2.0f*phase));
 }
 
+static inline float triangle_window(float phase) {
+	return phase;
+}
+
 int filter_gen_fir(void) {
 	/* For a first-order sinc and 16x oversampling, we would need coefficients for +/- 15 samples for
 	 * a total of 31 samples or (2*oversampling - 1). For a second-order filter, we would add 16 coeffs
@@ -135,7 +139,6 @@ int filter_gen_fir(void) {
 		buf[FMAC_SINC_CENTER + i] = c;
 		buf[FMAC_SINC_CENTER - i] = c;
 	}
-
 	return fmac_stm32_configure_fir(fmac_dev, &buf[0], ARRAY_SIZE(buf));
 }
 

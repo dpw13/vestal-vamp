@@ -36,6 +36,16 @@ static q15_t phase_buf[FFT_SIZE] __attribute__ ((aligned (32)));
 /* 1/(2*M_PI_F) in uQ-2.18 format */
 static uint32_t inv_two_pi;
 
+q15_t injected_phase;
+
+static inline void inject_tone(uint16_t bin, uint16_t magnitude) {
+        ifft_fd_buffer[2*bin+0] = (q31_t)magnitude * arm_cos_q15(injected_phase);
+        ifft_fd_buffer[2*bin+1] = (q31_t)magnitude * arm_sin_q15(injected_phase);
+
+        /* Model phase offset due to window overlap */
+        injected_phase += bin << 12;
+}
+
 /**
  * Interpolate and phase-unwrap the frequency sample at fractional index
  * `idx`. Stores into `ifft_fd_buffer`.
@@ -60,9 +70,10 @@ static void interp_freq(frac_idx_t idx, uint16_t pitch_shift) {
 
         /* Clear destination buffer */
         memset(&ifft_fd_buffer[0], 0, sizeof(ifft_fd_buffer));
-        /* TODO: phase results in complete cancellation every 4 bins */
-        ifft_fd_buffer[800] = 0x7f000000;
-        return;
+        if (0) {
+                /* TODO: Settings and debug */
+                inject_tone(128, 0x7fff);
+        }
 
         /* Interpolate DC real content */
         ifft_fd_buffer[0] = ((q31_t)src_buf[0]->mag[0] << 16) * frac_a + ((q31_t)src_buf[1]->mag[0]++ << 16) * frac_b;
