@@ -58,6 +58,7 @@ struct dfsdm_stm32_data {
 	enum sinc_order_t sinc_order;
 	uint16_t sinc_oversample;
 	uint16_t intg_oversample;
+	uint8_t rshift;
 
 	dfsdm_dma_callback callback;
 };
@@ -116,7 +117,7 @@ static int dfsdm_stm32_dma_start(const struct device *dev,
 	/* Source and destination */
 
 	/* Use 16-bit access of LSB (add 2 for MSB) */
-	blk_cfg->source_address = (uint32_t)&data->filter.Instance->FLTRDATAR;
+	blk_cfg->source_address = (uint32_t)&data->filter.Instance->FLTRDATAR + 2;
 	blk_cfg->source_addr_adj = DMA_ADDR_ADJ_NO_CHANGE;
 	blk_cfg->source_reload_en = 1;
 
@@ -279,7 +280,7 @@ static struct dfsdm_stm32_data dfsdm_stm32_data_##id = {			\
 				.Pins = DFSDM_CHANNEL_SAME_CHANNEL_PINS,	\
 			},							\
 			.Offset = 0,						\
-			.RightBitShift = 4,					\
+			.RightBitShift = DT_INST_PROP_OR(id, rshift, 0),	\
 			.Awd = { .Oversampling = 1, },				\
 		},								\
 	},									\
@@ -294,7 +295,7 @@ static struct dfsdm_stm32_data dfsdm_stm32_data_##id = {			\
 			.FilterParam = {					\
 				.IntOversampling = 1, /* Integrator bypass */	\
 				.Oversampling = 16,				\
-				.SincOrder = DFSDM_FILTER_SINC5_ORDER, /* Shrug? */ \
+				.SincOrder = DFSDM_FILTER_SINC3_ORDER, /* Shrug? */ \
 			},							\
 		},								\
 	},									\

@@ -61,8 +61,8 @@ static void interp_freq(frac_idx_t idx, uint16_t pitch_shift) {
         uint32_t k;
         uint32_t idx_i = idx_ipart(idx);
         uint32_t idx_j = (idx_i + 1) & WINDOW_IDX_MASK;
-        uint32_t frac_a = idx_fpart(idx);
-        uint32_t frac_b = (1u << 31) - frac_a;
+        uint16_t frac_b = (uint16_t)(idx_fpart(idx) >> 16);
+        uint16_t frac_a = (1u << 15) - frac_b;
 
         struct polar_freq_data *src_buf[2] = {
                 get_lt_buf(idx_i), get_lt_buf(idx_j),
@@ -74,21 +74,22 @@ static void interp_freq(frac_idx_t idx, uint16_t pitch_shift) {
                 /* TODO: Settings and debug */
                 inject_tone(128, 0x7fff);
         }
+        //return;
 
         /* Interpolate DC real content */
-        ifft_fd_buffer[0] = ((q31_t)src_buf[0]->mag[0] << 16) * frac_a + ((q31_t)src_buf[1]->mag[0]++ << 16) * frac_b;
+        ifft_fd_buffer[0] = ((q31_t)src_buf[0]->mag[0]) * frac_a + ((q31_t)src_buf[1]->mag[0]) * frac_b;
         /* Nyquist real value is packed into index 0 of phase. Unpack to the expected index. */
-        ifft_fd_buffer[2*FFT_SIZE] = ((q31_t)src_buf[0]->phase[0] << 16) * frac_a + ((q31_t)src_buf[1]->phase[0]++ << 16) * frac_b;
+        ifft_fd_buffer[2*FFT_SIZE] = ((q31_t)src_buf[0]->phase[0]) * frac_a + ((q31_t)src_buf[1]->phase[0]) * frac_b;
 
         /* Calculate phase delta by subtracting the precalculated instantaneous phases.
          * Only do this for actual frequency bins and not bin 0.
          * TODO: Compare this naive approach to vectorized math.
          */
 
-        q15_t *phase_a = &src_buf[0]->phase[0];
-        q15_t *phase_b = &src_buf[1]->phase[0];
-        q15_t *mag_a = &src_buf[0]->mag[0];
-        q15_t *mag_b = &src_buf[1]->mag[0];
+        q15_t *phase_a = &src_buf[0]->phase[1];
+        q15_t *phase_b = &src_buf[1]->phase[1];
+        q15_t *mag_a = &src_buf[0]->mag[1];
+        q15_t *mag_b = &src_buf[1]->mag[1];
 
         for (k=1; k < FFT_SIZE; k++) {
                 /* Step 1: Calculate delta phase as (signed) Q2.13. Range (-pi, pi] */
@@ -142,7 +143,7 @@ static void interp_freq(frac_idx_t idx, uint16_t pitch_shift) {
                 /* 5a: Compute interpolated magnitude. Everything up to this point
                  * has only dealt with phase.
                  */
-                q31_t mag = ((q31_t)*mag_a++ << 16) * frac_a + ((q31_t)*mag_b++ << 16) * frac_b;
+                q31_t mag = ((q31_t)*mag_a++) * frac_a + ((q31_t)*mag_b++) * frac_b;
 
                 /* 5b: compute phasor from magnitude and phase and add into destination bin. */
                 /* The q15 fast cos takes as its input sQ0.15 in the range [0, 1) and will

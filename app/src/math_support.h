@@ -17,8 +17,12 @@ static inline q15_t arm_float_to_q15_once_round(float32_t in) {
 }
 
 /* Copied from arm_float_to_q31 and adapted to a single value */
-static inline q15_t arm_float_to_q31_once(float32_t in) {
+static inline q31_t arm_float_to_q31_once(float32_t in) {
         return clip_q63_to_q31((q63_t) (in * 2147483648.0f));
+}
+
+static inline q15_t arm_q31_to_q15_once(q31_t in) {
+    return (q15_t) (in >> 16);
 }
 
 /* Copied from arm_cmplx_mag_fast_q15. Increments pSrc by 2 */

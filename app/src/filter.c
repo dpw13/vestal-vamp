@@ -1,3 +1,4 @@
+#include <zephyr/cache.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/drivers/dma.h>
 #include <zephyr/drivers/clock_control/stm32_clock_control.h>
@@ -63,14 +64,12 @@ uint8_t ping_pong_idx;
 static int fmac_cb(const struct device *dev, int status) {
 	fmac_sample_count += UPSAMPLE_SRC_SAMPLES;
 
-	/* Copy DAC samples into upsampling buffer */
-	uint16_t *src = (uint16_t *)&dac_buffer[dac_sample_idx];
-	uint16_t *dst;
-
 	/* TODO: bookkeeping */
 	claim_dac_samples(&dac_buffer[dac_sample_idx], UPSAMPLE_SRC_SAMPLES);
-	dst = ping_pong_idx == 0 ? &upsample_buffer[0] : &upsample_buffer[UPSAMPLE_HALF_BUF];
 
+	uint16_t *src = (uint16_t *)&dac_buffer[dac_sample_idx];
+	uint16_t *dst_base = ping_pong_idx == 0 ? &upsample_buffer[0] : &upsample_buffer[UPSAMPLE_HALF_BUF];
+	uint16_t *dst = dst_base;
 	LOG_DBG("fmac_cb %d %p->%p", status, src, dst);
 
 	/* The upsample buffer is already filled with zeros, so just copy
@@ -85,6 +84,7 @@ static int fmac_cb(const struct device *dev, int status) {
 		*dst = (0x8000 ^ *src++) >> 1;
 		dst += AUDIO_OVERSAMPLE;
 	}
+	sys_cache_data_flush_range(dst_base, UPSAMPLE_HALF_BUF*sizeof(uint16_t));
 
 	dac_sample_idx = (dac_sample_idx + UPSAMPLE_SRC_SAMPLES) % ARRAY_SIZE(dac_buffer);
 	ping_pong_idx = !ping_pong_idx;

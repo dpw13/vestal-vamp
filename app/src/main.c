@@ -9,7 +9,6 @@
 #include <zephyr/drivers/gpio.h>
 
 #include "filter.h"
-#include "opamp.h"
 #include "adc.h"
 #include "dac.h"
 #include "display.h"
@@ -22,10 +21,10 @@
 
 #define SLEEP_TIME_MS  500
 
-/* The devicetree node identifier for the "led0" alias. */
-#define LED0_NODE DT_ALIAS(led0)
+/* The devicetree node identifier for the "led1" alias. */
+#define LED_NODE DT_ALIAS(led1)
 
-static const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(LED0_NODE, gpios);
+static const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(LED_NODE, gpios);
 
 /* TODO:
 SPI to ioexp
@@ -54,7 +53,6 @@ int main(void)
 	fft_init();
 	ifft_init();
 
-	opamp_init();
 	adc_init();
 	dac_init();
 	timer_init();

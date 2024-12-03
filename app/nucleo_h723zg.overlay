@@ -112,15 +112,34 @@
 	};
 };
 
+&opamp1 {
+	pinctrl-0 = <&analog_pb0>; /* vinp, vinn is connected internally */
+	pinctrl-names = "default";
+	status = "okay";
+
+	pos-term = <0>; /* gpio */
+	neg-term = <3>; /* vinm */
+};
+
+&opamp2 {
+	pinctrl-0 = <&analog_pe7>;
+	pinctrl-names = "default";
+	status = "okay";
+
+	pos-term = <1>; /* dac */
+	neg-term = <3>; /* vinm */
+};
+
 &dfsdm1 {
 	dmas = <&dmamux1 3 101 (STM32_DMA_PERIPH_TO_MEMORY | STM32_DMA_MEM_INC |
 		STM32_DMA_MEM_16BITS | STM32_DMA_PERIPH_16BITS)>;
 	dma-names = "rx";
 	status = "okay";
 
-	sinc_order = <5>;
+	sinc_order = <4>;
 	intg_oversample = <1>;
 	sinc_oversample = <16>;
+	rshift = <8>;
 };
 
 &fmac {
@@ -150,12 +169,16 @@
 	st,adc-clock-source = <SYNC>;
 	/* 34375 kHz or 550 MHz/16 */
 	st,adc-prescaler = <4>;
+	/* The ADC full range is in fact 3.3V, but the opamp doesn't appear to
+	 * want to drive beyond 2.5V. TODO: investigate */
 	vref-mv = <3300>;
 	status = "okay";
 
 	channel@4 {
 		reg = <4>;
 		zephyr,gain = "ADC_GAIN_1";
+		/* This is the offset for 1.25 V */
+		zephyr,offset = <0x60F8>;
 		zephyr,reference = "ADC_REF_INTERNAL";
 		zephyr,acquisition-time = <ADC_ACQ_TIME(ADC_ACQ_TIME_TICKS, 17)>;
 		zephyr,resolution = <16>;
@@ -286,5 +309,20 @@
 };
 
 &usart2 {
+	status = "disabled";
+};
+
+/* Disable MAC and MDIO for now to free up PC4. Still need to remove
+ * SB36 to avoid driving RMII_RXD0 mid-threshold.
+ */
+&mac {
+	status = "disabled";
+};
+
+&mdio {
+	status = "disabled";
+};
+
+&green_led {
 	status = "disabled";
 };
