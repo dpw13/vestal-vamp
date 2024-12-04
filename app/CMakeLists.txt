@@ -19,6 +19,7 @@ target_sources(app PRIVATE
         src/ifft_dma.c
         src/settings.c
 
+        src/cordic_stm32.c
         src/dfsdm_stm32.c
         src/fmac_stm32.c
         src/opamp_stm32.c
