@@ -63,8 +63,7 @@ struct dfsdm_stm32_data {
 	dfsdm_dma_callback callback;
 };
 
-static void dma_callback(const struct device *dev, void *user_data,
-			 uint32_t channel, int status)
+static void dma_callback(const struct device *dev, void *user_data, uint32_t channel, int status)
 {
 	/* user_data directly holds the dfsdm device */
 	struct dfsdm_stm32_data *data = (struct dfsdm_stm32_data *)user_data;
@@ -74,11 +73,11 @@ static void dma_callback(const struct device *dev, void *user_data,
 			LOG_DBG("status %d", status);
 			data->callback(dev, status);
 			if (!data->continuous) {
-				/* Stop the DMA engine, only to start it again when the callback returns
-				* DFSDM_ACTION_REPEAT or DFSDM_ACTION_CONTINUE, or the number of samples
-				* haven't been reached Starting the DMA engine is done
-				* within dfsdm_context_start_sampling
-				*/
+				/* Stop the DMA engine, only to start it again when the callback
+				 * returns DFSDM_ACTION_REPEAT or DFSDM_ACTION_CONTINUE, or the
+				 * number of samples haven't been reached Starting the DMA engine is
+				 * done within dfsdm_context_start_sampling
+				 */
 				dma_stop(data->dma.dma_dev, data->dma.channel);
 			}
 		} else if (status < 0) {
@@ -97,8 +96,7 @@ static void dma_callback(const struct device *dev, void *user_data,
 	}
 }
 
-static int dfsdm_stm32_dma_start(const struct device *dev,
-			       void *buffer, size_t buffer_len)
+static int dfsdm_stm32_dma_start(const struct device *dev, void *buffer, size_t buffer_len)
 {
 	struct dfsdm_stm32_data *data = (struct dfsdm_stm32_data *)dev->data;
 	struct dma_block_config *blk_cfg;
@@ -140,8 +138,7 @@ static int dfsdm_stm32_dma_start(const struct device *dev,
 	dma->dma_cfg.user_data = data;
 	dma->dma_cfg.cyclic = data->continuous;
 
-	ret = dma_config(data->dma.dma_dev, data->dma.channel,
-			 &dma->dma_cfg);
+	ret = dma_config(data->dma.dma_dev, data->dma.channel, &dma->dma_cfg);
 	if (ret != 0) {
 		LOG_ERR("Problem setting up DMA: %d", ret);
 		return ret;
@@ -159,7 +156,9 @@ static int dfsdm_stm32_dma_start(const struct device *dev,
 	return ret;
 }
 
-int dfsdm_stm32_start(const struct device *dev, void *buffer, size_t buffer_len, dfsdm_dma_callback cb) {
+int dfsdm_stm32_start(const struct device *dev, void *buffer, size_t buffer_len,
+		      dfsdm_dma_callback cb)
+{
 	struct dfsdm_stm32_data *data = (struct dfsdm_stm32_data *)dev->data;
 	HAL_StatusTypeDef ret;
 
@@ -190,7 +189,7 @@ static int dfsdm_stm32_init(const struct device *dev)
 
 	/* TODO: we don't currently support clock selection */
 	err = clock_control_on(DEVICE_DT_GET(STM32_CLOCK_CONTROL_NODE),
-			       (clock_control_subsys_t) &cfg->pclken[0]);
+			       (clock_control_subsys_t)&cfg->pclken[0]);
 	if (err < 0) {
 		LOG_ERR("Could not enable DFSDM clock");
 		return err;
@@ -222,7 +221,8 @@ static int dfsdm_stm32_init(const struct device *dev)
 		return ret;
 	}
 
-	ret = HAL_DFSDM_FilterConfigRegChannel(&data->filter, DFSDM_CHANNEL_0, DFSDM_CONTINUOUS_CONV_ON);
+	ret = HAL_DFSDM_FilterConfigRegChannel(&data->filter, DFSDM_CHANNEL_0,
+					       DFSDM_CONTINUOUS_CONV_ON);
 	if (ret != HAL_OK) {
 		LOG_ERR("Failed to configure DFSDM filter");
 		return ret;
@@ -233,83 +233,96 @@ static int dfsdm_stm32_init(const struct device *dev)
 	return 0;
 }
 
-#define DFSDM_DMA_CHANNEL_INIT(index, src_dev, dest_dev)					\
-	.dma = {									\
-		.dma_dev = DEVICE_DT_GET(DT_INST_DMAS_CTLR_BY_IDX(index, 0)),		\
-		.channel = DT_INST_DMAS_CELL_BY_IDX(index, 0, channel),			\
-		.dma_cfg = {								\
-			.dma_slot = STM32_DMA_SLOT_BY_IDX(index, 0, slot),		\
-			.channel_direction = STM32_DMA_CONFIG_DIRECTION(		\
-				STM32_DMA_CHANNEL_CONFIG_BY_IDX(index, 0)),		\
-			.source_data_size = STM32_DMA_CONFIG_##src_dev##_DATA_SIZE(	\
-				STM32_DMA_CHANNEL_CONFIG_BY_IDX(index, 0)),		\
-			.dest_data_size = STM32_DMA_CONFIG_##dest_dev##_DATA_SIZE(	\
-				STM32_DMA_CHANNEL_CONFIG_BY_IDX(index, 0)),		\
-			.source_burst_length = 1,       /* SINGLE transfer */		\
-			.dest_burst_length = 4,         /* Burst transfer to mem */	\
-			.channel_priority = STM32_DMA_CONFIG_PRIORITY(			\
-				STM32_DMA_CHANNEL_CONFIG_BY_IDX(index, 0)),		\
-			.dma_callback = dma_callback,					\
-			.complete_callback_en = 1, /* Callback at each block */		\
-			.block_count = 1,						\
-		},									\
-		.src_addr_increment = STM32_DMA_CONFIG_##src_dev##_ADDR_INC(		\
-			STM32_DMA_CHANNEL_CONFIG_BY_IDX(index, 0)),			\
-		.dst_addr_increment = STM32_DMA_CONFIG_##dest_dev##_ADDR_INC(		\
-			STM32_DMA_CHANNEL_CONFIG_BY_IDX(index, 0)),			\
+#define DFSDM_DMA_CHANNEL_INIT(index, src_dev, dest_dev)                                           \
+	.dma = {                                                                                   \
+		.dma_dev = DEVICE_DT_GET(DT_INST_DMAS_CTLR_BY_IDX(index, 0)),                      \
+		.channel = DT_INST_DMAS_CELL_BY_IDX(index, 0, channel),                            \
+		.dma_cfg =                                                                         \
+			{                                                                          \
+				.dma_slot = STM32_DMA_SLOT_BY_IDX(index, 0, slot),                 \
+				.channel_direction = STM32_DMA_CONFIG_DIRECTION(                   \
+					STM32_DMA_CHANNEL_CONFIG_BY_IDX(index, 0)),                \
+				.source_data_size = STM32_DMA_CONFIG_##src_dev##_DATA_SIZE(        \
+					STM32_DMA_CHANNEL_CONFIG_BY_IDX(index, 0)),                \
+				.dest_data_size = STM32_DMA_CONFIG_##dest_dev##_DATA_SIZE(         \
+					STM32_DMA_CHANNEL_CONFIG_BY_IDX(index, 0)),                \
+				.source_burst_length = 1, /* SINGLE transfer */                    \
+				.dest_burst_length = 4,   /* Burst transfer to mem */              \
+				.channel_priority = STM32_DMA_CONFIG_PRIORITY(                     \
+					STM32_DMA_CHANNEL_CONFIG_BY_IDX(index, 0)),                \
+				.dma_callback = dma_callback,                                      \
+				.complete_callback_en = 1, /* Callback at each block */            \
+				.block_count = 1,                                                  \
+			},                                                                         \
+		.src_addr_increment = STM32_DMA_CONFIG_##src_dev##_ADDR_INC(                       \
+			STM32_DMA_CHANNEL_CONFIG_BY_IDX(index, 0)),                                \
+		.dst_addr_increment = STM32_DMA_CONFIG_##dest_dev##_ADDR_INC(                      \
+			STM32_DMA_CHANNEL_CONFIG_BY_IDX(index, 0)),                                \
 	}
 
-#define STM32_DFSDM_INIT(id)							\
-										\
-static const struct stm32_pclken pclken_##id[] =				\
-					       STM32_DT_INST_CLOCKS(id);	\
-										\
-static const struct dfsdm_stm32_config dfsdm_stm32_cfg_##id = {			\
-	.pclken = pclken_##id,							\
-	.pclk_len = DT_INST_NUM_CLOCKS(id),					\
-	.reset = RESET_DT_SPEC_INST_GET(id),					\
-};										\
-										\
-static struct dfsdm_stm32_data dfsdm_stm32_data_##id = {			\
-	.channel = {								\
-		.Instance = (DFSDM_Channel_TypeDef  *) DT_INST_REG_ADDR_BY_NAME(id, channel), \
-		.Init = {							\
-			.Input = {						\
-				.Multiplexer = DFSDM_CHANNEL_ADC_OUTPUT,	\
-				.DataPacking = DFSDM_CHANNEL_STANDARD_MODE,     \
-				.Pins = DFSDM_CHANNEL_SAME_CHANNEL_PINS,	\
-			},							\
-			.Offset = 0,						\
-			.RightBitShift = DT_INST_PROP_OR(id, rshift, 0),	\
-			.Awd = { .Oversampling = 1, },				\
-		},								\
-	},									\
-	.filter = {								\
-		.Instance = (DFSDM_Filter_TypeDef  *) DT_INST_REG_ADDR_BY_NAME(id, filter), \
-		.Init = {							\
-			.RegularParam = {					\
-				.Trigger = DFSDM_FILTER_SW_TRIGGER,		\
-				.FastMode = ENABLE,				\
-				.DmaMode = ENABLE,				\
-			},							\
-			.FilterParam = {					\
-				.IntOversampling = 1, /* Integrator bypass */	\
-				.Oversampling = 16,				\
-				.SincOrder = DFSDM_FILTER_SINC3_ORDER, /* Shrug? */ \
-			},							\
-		},								\
-	},									\
-	.continuous = true,							\
-	.sinc_order = (enum sinc_order_t)DT_ENUM_IDX_OR(id, sinc_order, 0),	\
-	.sinc_oversample = DT_INST_PROP_OR(id, sinc_oversample, 16),		\
-	.intg_oversample = DT_INST_PROP_OR(id, intg_oversample, 1),		\
-	DFSDM_DMA_CHANNEL_INIT(id, PERIPHERAL, MEMORY)				\
-};										\
-										\
-DEVICE_DT_INST_DEFINE(id,							\
-		    &dfsdm_stm32_init, NULL,					\
-		    &dfsdm_stm32_data_##id, &dfsdm_stm32_cfg_##id,		\
-		    POST_KERNEL, CONFIG_ADC_INIT_PRIORITY,			\
-		    NULL);
+#define STM32_DFSDM_INIT(id)                                                                                   \
+                                                                                                               \
+	static const struct stm32_pclken pclken_##id[] = STM32_DT_INST_CLOCKS(id);                             \
+                                                                                                               \
+	static const struct dfsdm_stm32_config dfsdm_stm32_cfg_##id = {                                        \
+		.pclken = pclken_##id,                                                                         \
+		.pclk_len = DT_INST_NUM_CLOCKS(id),                                                            \
+		.reset = RESET_DT_SPEC_INST_GET(id),                                                           \
+	};                                                                                                     \
+                                                                                                               \
+	static struct dfsdm_stm32_data dfsdm_stm32_data_##id = {                                               \
+		.channel =                                                                                     \
+			{                                                                                      \
+				.Instance = (DFSDM_Channel_TypeDef *)DT_INST_REG_ADDR_BY_NAME(                 \
+					id, channel),                                                          \
+				.Init =                                                                        \
+					{                                                                      \
+						.Input =                                                       \
+							{                                                      \
+								.Multiplexer =                                 \
+									DFSDM_CHANNEL_ADC_OUTPUT,              \
+								.DataPacking =                                 \
+									DFSDM_CHANNEL_STANDARD_MODE,           \
+								.Pins = DFSDM_CHANNEL_SAME_CHANNEL_PINS,       \
+							},                                                     \
+						.Offset = 0,                                                   \
+						.RightBitShift = DT_INST_PROP_OR(id, rshift, 0),               \
+						.Awd =                                                         \
+							{                                                      \
+								.Oversampling = 1,                             \
+							},                                                     \
+					},                                                                     \
+			},                                                                                     \
+		.filter =                                                                                      \
+			{                                                                                      \
+				.Instance = (DFSDM_Filter_TypeDef *)DT_INST_REG_ADDR_BY_NAME(                  \
+					id, filter),                                                           \
+				.Init =                                                                        \
+					{                                                                      \
+						.RegularParam =                                                \
+							{                                                      \
+								.Trigger =                                     \
+									DFSDM_FILTER_SW_TRIGGER,               \
+								.FastMode = ENABLE,                            \
+								.DmaMode = ENABLE,                             \
+							},                                                     \
+						.FilterParam =                                                 \
+							{                                                      \
+								.IntOversampling =                             \
+									1, /* Integrator bypass */             \
+								.Oversampling = 16,                            \
+								.SincOrder =                                   \
+									DFSDM_FILTER_SINC3_ORDER, /* Shrug? */ \
+							},                                                     \
+					},                                                                     \
+			},                                                                                     \
+		.continuous = true,                                                                            \
+		.sinc_order = (enum sinc_order_t)DT_ENUM_IDX_OR(id, sinc_order, 0),                            \
+		.sinc_oversample = DT_INST_PROP_OR(id, sinc_oversample, 16),                                   \
+		.intg_oversample = DT_INST_PROP_OR(id, intg_oversample, 1),                                    \
+		DFSDM_DMA_CHANNEL_INIT(id, PERIPHERAL, MEMORY)};                                               \
+                                                                                                               \
+	DEVICE_DT_INST_DEFINE(id, &dfsdm_stm32_init, NULL, &dfsdm_stm32_data_##id,                             \
+			      &dfsdm_stm32_cfg_##id, POST_KERNEL, CONFIG_ADC_INIT_PRIORITY, NULL);
 
 DT_INST_FOREACH_STATUS_OKAY(STM32_DFSDM_INIT)

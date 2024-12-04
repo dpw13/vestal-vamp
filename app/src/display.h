@@ -4,17 +4,17 @@
 #include <stdint.h>
 
 /* Internal */
-#define THIN_BAR_FULL   0xD0
-#define THICK_BAR_FULL  0xD6
-#define BAR_FULL        THICK_BAR_FULL
+#define THIN_BAR_FULL  0xD0
+#define THICK_BAR_FULL 0xD6
+#define BAR_FULL       THICK_BAR_FULL
 
 #define PARTIAL_BAR(n) (BAR_FULL + DISPLAY_CHAR_W - (n))
 
 /* External */
-#define DISPLAY_HRES    10
-#define DISPLAY_VRES    4
-#define DISPLAY_CHAR_W  5
-#define DISPLAY_CHAR_H  8
+#define DISPLAY_HRES   10
+#define DISPLAY_VRES   4
+#define DISPLAY_CHAR_W 5
+#define DISPLAY_CHAR_H 8
 
 void display_init(void);
 

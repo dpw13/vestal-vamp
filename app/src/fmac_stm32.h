@@ -3,11 +3,11 @@
 
 #include <zephyr/kernel.h>
 
-typedef int (*fmac_dma_callback)(const struct device *dev,
-					int status);
+typedef int (*fmac_dma_callback)(const struct device *dev, int status);
 
 int fmac_stm32_configure_fir(const struct device *dev, int16_t *coeffs, uint8_t coeff_len);
-int fmac_stm32_start(const struct device *dev, void *buffer, size_t buffer_len, fmac_dma_callback cb);
+int fmac_stm32_start(const struct device *dev, void *buffer, size_t buffer_len,
+		     fmac_dma_callback cb);
 uint32_t fmac_stm32_get_output_reg(const struct device *dev);
 
 #endif /* __FMAC_STM32_H__ */

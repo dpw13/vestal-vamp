@@ -19,7 +19,7 @@
 
 #include "settings.h"
 
-#define SLEEP_TIME_MS  500
+#define SLEEP_TIME_MS 500
 
 /* The devicetree node identifier for the "led1" alias. */
 #define LED_NODE DT_ALIAS(led1)
@@ -59,9 +59,9 @@ int main(void)
 	display_init();
 	display_text(0, " Vestal");
 	display_text(1, "     Vamp");
-	//display_text(1, "+++Line 1");
-	//display_text(2, "---Line 2");
-	//display_text(3, "***Line 3");
+	// display_text(1, "+++Line 1");
+	// display_text(2, "---Line 2");
+	// display_text(3, "***Line 3");
 
 	k_msleep(100);
 
@@ -69,10 +69,10 @@ int main(void)
 	adc_start();
 	timer_start();
 
-	//k_msleep(100);
-	//timer_stop();
+	// k_msleep(100);
+	// timer_stop();
 
-	uint16_t i=0;
+	uint16_t i = 0;
 	while (1) {
 		ret = gpio_pin_toggle_dt(&led);
 		if (ret < 0) {
@@ -81,9 +81,9 @@ int main(void)
 
 		led_state = !led_state;
 
-		//printf("LED state: %s\n", led_state ? "ON" : "OFF");
-		//snprintf(buf, 8, "%d", i);
-		//display_text(1, buf);
+		// printf("LED state: %s\n", led_state ? "ON" : "OFF");
+		// snprintf(buf, 8, "%d", i);
+		// display_text(1, buf);
 		display_bar(2, (i & 0x100) ? 256 - (i & 0xFF) : (i & 0xFF));
 		i++;
 
@@ -99,9 +99,9 @@ int main(void)
 		}
 #endif
 		io_work();
-		//timer_stats();
-		//adc_stats();
-		//dac_stats();
+		// timer_stats();
+		// adc_stats();
+		// dac_stats();
 		k_msleep(SLEEP_TIME_MS);
 	}
 	return 0;

@@ -17,26 +17,28 @@ static const struct device *const dfsdm_dev = DEVICE_DT_GET(DT_NODELABEL(dfsdm1)
 static const struct device *const fmac_dev = DEVICE_DT_GET(DT_NODELABEL(fmac));
 
 /* The ADC raw sample buffer */
-audio_raw_t adc_buffer[FFT_SIZE*2] __attribute__((__section__("SRAM4"))) __attribute__ ((aligned (32)));;
+audio_raw_t adc_buffer[FFT_SIZE * 2] Z_GENERIC_SECTION("SRAM4") __aligned(32);
+
 /* The "DAC buffer" holds the uninterpolated DAC samples. We zero-pad
  * these values before DMA so this buffer doesn't need to be in SRAM4.
  */
-audio_raw_t dac_buffer[FFT_SIZE*2] __attribute__ ((aligned (32)));;
+audio_raw_t dac_buffer[FFT_SIZE * 2] __aligned(32);
 
-uint16_t upsample_buffer[4096] __attribute__((__section__("SRAM4"))) __attribute__ ((aligned (32)));;
+uint16_t upsample_buffer[4096] Z_GENERIC_SECTION("SRAM4") __aligned(32);
 
 /* Calculate the number of DAC samples copied into the upsample buffer for each
  * half-transfer
  */
-#define UPSAMPLE_SRC_SAMPLES	(ARRAY_SIZE(upsample_buffer)/(2*AUDIO_OVERSAMPLE))
-#define UPSAMPLE_HALF_BUF	(ARRAY_SIZE(upsample_buffer)/2)
+#define UPSAMPLE_SRC_SAMPLES (ARRAY_SIZE(upsample_buffer) / (2 * AUDIO_OVERSAMPLE))
+#define UPSAMPLE_HALF_BUF    (ARRAY_SIZE(upsample_buffer) / 2)
 
 /* TODO: move to stats */
 static uint32_t dfsdm_sample_count;
 static uint32_t fmac_sample_count;
 static uint16_t dac_sample_idx;
 
-static int dfsdm_cb(const struct device *dev, int status) {
+static int dfsdm_cb(const struct device *dev, int status)
+{
 	dfsdm_sample_count += FFT_SIZE;
 	LOG_DBG("dfsdm_cb");
 
@@ -61,14 +63,16 @@ static int dfsdm_cb(const struct device *dev, int status) {
 
 uint8_t ping_pong_idx;
 
-static int fmac_cb(const struct device *dev, int status) {
+static int fmac_cb(const struct device *dev, int status)
+{
 	fmac_sample_count += UPSAMPLE_SRC_SAMPLES;
 
 	/* TODO: bookkeeping */
 	claim_dac_samples(&dac_buffer[dac_sample_idx], UPSAMPLE_SRC_SAMPLES);
 
 	uint16_t *src = (uint16_t *)&dac_buffer[dac_sample_idx];
-	uint16_t *dst_base = ping_pong_idx == 0 ? &upsample_buffer[0] : &upsample_buffer[UPSAMPLE_HALF_BUF];
+	uint16_t *dst_base =
+		ping_pong_idx == 0 ? &upsample_buffer[0] : &upsample_buffer[UPSAMPLE_HALF_BUF];
 	uint16_t *dst = dst_base;
 	LOG_DBG("fmac_cb %d %p->%p", status, src, dst);
 
@@ -84,7 +88,7 @@ static int fmac_cb(const struct device *dev, int status) {
 		*dst = (0x8000 ^ *src++) >> 1;
 		dst += AUDIO_OVERSAMPLE;
 	}
-	sys_cache_data_flush_range(dst_base, UPSAMPLE_HALF_BUF*sizeof(uint16_t));
+	sys_cache_data_flush_range(dst_base, UPSAMPLE_HALF_BUF * sizeof(uint16_t));
 
 	dac_sample_idx = (dac_sample_idx + UPSAMPLE_SRC_SAMPLES) % ARRAY_SIZE(dac_buffer);
 	ping_pong_idx = !ping_pong_idx;
@@ -92,63 +96,71 @@ static int fmac_cb(const struct device *dev, int status) {
 	return 0;
 }
 
-uint32_t filter_get_dac_dma_addr(void) {
+uint32_t filter_get_dac_dma_addr(void)
+{
 	return fmac_stm32_get_output_reg(fmac_dev);
 }
 
-#define FMAC_SINC_CENTER	(AUDIO_OVERSAMPLE*FMAC_SINC_ORDER - 1)
+#define FMAC_SINC_CENTER (AUDIO_OVERSAMPLE * FMAC_SINC_ORDER - 1)
 
-static inline float hanning_window(float phase) {
+static inline float hanning_window(float phase)
+{
 	return 0.5f * (1.0f + cosf(phase));
 }
 
-static inline float hamming_window(float phase) {
+static inline float hamming_window(float phase)
+{
 	return 0.54f + (0.46f * cosf(phase));
 }
 
-static inline float blackman_window(float phase) {
-	return 0.42f + (0.5f * cosf(phase)) + (0.08f * cosf(2.0f*phase));
+static inline float blackman_window(float phase)
+{
+	return 0.42f + (0.5f * cosf(phase)) + (0.08f * cosf(2.0f * phase));
 }
 
-static inline float triangle_window(float phase) {
+static inline float triangle_window(float phase)
+{
 	return phase;
 }
 
-int filter_gen_fir(void) {
-	/* For a first-order sinc and 16x oversampling, we would need coefficients for +/- 15 samples for
-	 * a total of 31 samples or (2*oversampling - 1). For a second-order filter, we would add 16 coeffs
-	 * above and 16 coeffs below or (4*oversampling - 1) = (2*order*oversampling - 1). The center index
-	 * is 2*order*oversampling and will always be 1.0.
+int filter_gen_fir(void)
+{
+	/* For a first-order sinc and 16x oversampling, we would need coefficients for +/- 15
+	 * samples for a total of 31 samples or (2*oversampling - 1). For a second-order filter, we
+	 * would add 16 coeffs above and 16 coeffs below or (4*oversampling - 1) =
+	 * (2*order*oversampling - 1). The center index is 2*order*oversampling and will always
+	 * be 1.0.
 	 */
-	int16_t buf[AUDIO_OVERSAMPLE*2*FMAC_SINC_ORDER - 1];
+	int16_t buf[AUDIO_OVERSAMPLE * 2 * FMAC_SINC_ORDER - 1];
 
-	/* Maximum positive value is as close to 1.0 as we can get. We may need to scale the remaining
-	 * coefficients so this is exactly 1.0.
+	/* Maximum positive value is as close to 1.0 as we can get. We may need to scale the
+	 * remaining coefficients so this is exactly 1.0.
 	 */
 	buf[FMAC_SINC_CENTER] = 0x7fff;
 	for (int i = 1; i <= FMAC_SINC_CENTER; i++) {
-		float phase = M_PI_F*i/AUDIO_OVERSAMPLE;
-		float window_phase = M_PI_F*i/(AUDIO_OVERSAMPLE*FMAC_SINC_ORDER);
-		float coeff = sinf(phase)/phase;
+		float phase = M_PI_F * i / AUDIO_OVERSAMPLE;
+		float window_phase = M_PI_F * i / (AUDIO_OVERSAMPLE * FMAC_SINC_ORDER);
+		float coeff = sinf(phase) / phase;
 		float win = hamming_window(window_phase);
-		/* TODO: scaling could be cheap to do here to keep samples away from DAC rails but because
-		 * of how we're converting everything to unsigned (and losing the top bit of precision) we
-		 * also end up with an offset error.
+		/* TODO: scaling could be cheap to do here to keep samples away from DAC rails but
+		 * because of how we're converting everything to unsigned (and losing the top bit of
+		 * precision) we also end up with an offset error.
 		 */
-		int16_t c = arm_float_to_q15_once_round(win*coeff);
+		int16_t c = arm_float_to_q15_once_round(win * coeff);
 		buf[FMAC_SINC_CENTER + i] = c;
 		buf[FMAC_SINC_CENTER - i] = c;
 	}
 	return fmac_stm32_configure_fir(fmac_dev, &buf[0], ARRAY_SIZE(buf));
 }
 
-int filter_start(void) {
+int filter_start(void)
+{
 	int ret;
 
 	/* Initialize interpolation buffer */
-	//for (int i=0; i<ARRAY_SIZE(upsample_buffer); i++) {
+	// for (int i=0; i<ARRAY_SIZE(upsample_buffer); i++) {
 	//	upsample_buffer[i] = 0x8000;
-	//}
+	// }
 	memset(&upsample_buffer[0], 0, sizeof(upsample_buffer));
 	ping_pong_idx = 0;
 
@@ -175,11 +187,10 @@ int filter_start(void) {
 	return 0;
 }
 
-int filter_stats(void) {
-	LOG_INF("%s: %d samples", dfsdm_dev->name,
-		dfsdm_sample_count);
-	LOG_INF("%s: %d samples", fmac_dev->name,
-		fmac_sample_count);
+int filter_stats(void)
+{
+	LOG_INF("%s: %d samples", dfsdm_dev->name, dfsdm_sample_count);
+	LOG_INF("%s: %d samples", fmac_dev->name, fmac_sample_count);
 
 	return 0;
 }

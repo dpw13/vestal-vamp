@@ -64,8 +64,7 @@ struct fmac_stm32_data {
 	fmac_dma_callback callback;
 };
 
-static void dma_callback(const struct device *dev, void *user_data,
-			 uint32_t channel, int status)
+static void dma_callback(const struct device *dev, void *user_data, uint32_t channel, int status)
 {
 	/* user_data directly holds the fmac device */
 	struct fmac_stm32_data *data = (struct fmac_stm32_data *)user_data;
@@ -75,11 +74,12 @@ static void dma_callback(const struct device *dev, void *user_data,
 			LOG_DBG("status %d at %d samples", status, data->buffer_len);
 			data->callback(dev, status);
 			if (!data->continuous) {
-				/* Stop the DMA engine, only to start it again when the callback returns
-				* FMAC_ACTION_REPEAT or FMAC_ACTION_CONTINUE, or the number of samples
-				* haven't been reached Starting the DMA engine is done
-				* within fmac_context_start_sampling
-				*/
+				/* Stop the DMA engine, only to start it again when the callback
+				 * returns FMAC_ACTION_REPEAT or FMAC_ACTION_CONTINUE, or the number
+				 * of samples haven't been reached Starting the DMA engine is done
+				 * within fmac_context_start_sampling
+				 */
+				dma_stop(data->dma.dma_dev, data->dma.channel);
 			}
 		} else if (status < 0) {
 			LOG_ERR("DMA sampling complete, but DMA reported error %d", status);
@@ -91,8 +91,7 @@ static void dma_callback(const struct device *dev, void *user_data,
 	}
 }
 
-static int fmac_stm32_dma_start(const struct device *dev,
-			       void *buffer, size_t buffer_len)
+static int fmac_stm32_dma_start(const struct device *dev, void *buffer, size_t buffer_len)
 {
 	struct fmac_stm32_data *data = (struct fmac_stm32_data *)dev->data;
 	struct dma_block_config *blk_cfg;
@@ -134,8 +133,7 @@ static int fmac_stm32_dma_start(const struct device *dev,
 	dma->dma_cfg.user_data = data;
 	dma->dma_cfg.cyclic = data->continuous;
 
-	ret = dma_config(data->dma.dma_dev, data->dma.channel,
-			 &dma->dma_cfg);
+	ret = dma_config(data->dma.dma_dev, data->dma.channel, &dma->dma_cfg);
 	if (ret != 0) {
 		LOG_ERR("Problem setting up DMA: %d", ret);
 		return ret;
@@ -153,7 +151,9 @@ static int fmac_stm32_dma_start(const struct device *dev,
 	return ret;
 }
 
-int fmac_stm32_start(const struct device *dev, void *buffer, size_t buffer_len, fmac_dma_callback cb) {
+int fmac_stm32_start(const struct device *dev, void *buffer, size_t buffer_len,
+		     fmac_dma_callback cb)
+{
 	struct fmac_stm32_data *data = (struct fmac_stm32_data *)dev->data;
 
 	data->buffer = (uint8_t *)buffer;
@@ -174,24 +174,30 @@ int fmac_stm32_start(const struct device *dev, void *buffer, size_t buffer_len, 
 		LOG_ERR("FMAC started unexpectedly!");
 	}
 	if (data->op == FMAC_OP_CONV) {
-		LL_FMAC_ConfigFunc(data->fmac, LL_FMAC_PROCESSING_START, LL_FMAC_FUNC_CONVO_FIR, data->x2_size, 0, data->lshift);
+		LL_FMAC_ConfigFunc(data->fmac, LL_FMAC_PROCESSING_START, LL_FMAC_FUNC_CONVO_FIR,
+				   data->x2_size, 0, data->lshift);
 	} else {
-		LL_FMAC_ConfigFunc(data->fmac, LL_FMAC_PROCESSING_START, LL_FMAC_FUNC_IIR_DIRECT_FORM_1, data->x2_size - data->feedback_coeffs, data->feedback_coeffs, data->lshift);
+		LL_FMAC_ConfigFunc(
+			data->fmac, LL_FMAC_PROCESSING_START, LL_FMAC_FUNC_IIR_DIRECT_FORM_1,
+			data->x2_size - data->feedback_coeffs, data->feedback_coeffs, data->lshift);
 	}
 
 	LOG_DBG("FMAC started");
-	while (!LL_FMAC_IsEnabledStart(data->fmac));
+	while (!LL_FMAC_IsEnabledStart(data->fmac))
+		;
 
 	return 0;
 }
 
-static int fmac_stm32_load_buf(const struct device *dev, uint32_t which, uint16_t *samples, size_t sample_count)
+static int fmac_stm32_load_buf(const struct device *dev, uint32_t which, uint16_t *samples,
+			       size_t sample_count)
 {
 	struct fmac_stm32_data *data = (struct fmac_stm32_data *)dev->data;
 
 	LL_FMAC_ConfigFunc(data->fmac, LL_FMAC_PROCESSING_START, which, sample_count, 0, 0);
-	while (!LL_FMAC_IsEnabledStart(data->fmac));
-	for (int i=0; i < sample_count; i++) {
+	while (!LL_FMAC_IsEnabledStart(data->fmac))
+		;
+	for (int i = 0; i < sample_count; i++) {
 		data->fmac->WDATA = *samples++;
 	}
 	if (LL_FMAC_IsEnabledStart(data->fmac)) {
@@ -202,23 +208,25 @@ static int fmac_stm32_load_buf(const struct device *dev, uint32_t which, uint16_
 	return 0;
 }
 
-static inline uint32_t fmac_stm32_samples_to_wm(uint8_t samples) {
+static inline uint32_t fmac_stm32_samples_to_wm(uint8_t samples)
+{
 	switch (samples) {
-		case 1:
-			return LL_FMAC_WM_0_THRESHOLD_1;
-		case 2:
-			return LL_FMAC_WM_1_THRESHOLD_2;
-		case 4:
-			return LL_FMAC_WM_2_THRESHOLD_4;
-		case 8:
-			return LL_FMAC_WM_3_THRESHOLD_8;
-		default:
-			LOG_ERR("Invalid watermark value, assuming 2 samples");
-			return LL_FMAC_WM_1_THRESHOLD_2;
+	case 1:
+		return LL_FMAC_WM_0_THRESHOLD_1;
+	case 2:
+		return LL_FMAC_WM_1_THRESHOLD_2;
+	case 4:
+		return LL_FMAC_WM_2_THRESHOLD_4;
+	case 8:
+		return LL_FMAC_WM_3_THRESHOLD_8;
+	default:
+		LOG_ERR("Invalid watermark value, assuming 2 samples");
+		return LL_FMAC_WM_1_THRESHOLD_2;
 	}
 }
 
-static int fmac_stm32_set_buffers(const struct device *dev) {
+static int fmac_stm32_set_buffers(const struct device *dev)
+{
 	struct fmac_stm32_data *data = (struct fmac_stm32_data *)dev->data;
 	uint16_t offset = 0;
 
@@ -237,12 +245,14 @@ static int fmac_stm32_set_buffers(const struct device *dev) {
 	return 0;
 }
 
-uint32_t fmac_stm32_get_output_reg(const struct device *dev) {
+uint32_t fmac_stm32_get_output_reg(const struct device *dev)
+{
 	struct fmac_stm32_data *data = (struct fmac_stm32_data *)dev->data;
 	return (uint32_t)&data->fmac->RDATA;
 }
 
-int fmac_stm32_configure_fir(const struct device *dev, int16_t *coeffs, uint8_t coeff_len) {
+int fmac_stm32_configure_fir(const struct device *dev, int16_t *coeffs, uint8_t coeff_len)
+{
 	int ret;
 	struct fmac_stm32_data *data = (struct fmac_stm32_data *)dev->data;
 	/* Configure filter function
@@ -268,8 +278,6 @@ int fmac_stm32_configure_fir(const struct device *dev, int16_t *coeffs, uint8_t 
 	return 0;
 }
 
-/* TODO: IIR not implemented */
-
 static int fmac_stm32_init(const struct device *dev)
 {
 	struct fmac_stm32_data *data = (struct fmac_stm32_data *)dev->data;
@@ -284,7 +292,7 @@ static int fmac_stm32_init(const struct device *dev)
 
 	/* TODO: we don't currently support clock selection */
 	err = clock_control_on(DEVICE_DT_GET(STM32_CLOCK_CONTROL_NODE),
-			       (clock_control_subsys_t) &cfg->pclken[0]);
+			       (clock_control_subsys_t)&cfg->pclken[0]);
 	if (err < 0) {
 		LOG_ERR("Could not enable FMAC clock");
 		return err;
@@ -312,62 +320,58 @@ static int fmac_stm32_init(const struct device *dev)
 	return 0;
 }
 
-#define FMAC_DMA_CHANNEL_INIT(index, src_dev, dest_dev)					\
-	.dma = {									\
-		.dma_dev = DEVICE_DT_GET(DT_INST_DMAS_CTLR_BY_IDX(index, 0)),		\
-		.channel = DT_INST_DMAS_CELL_BY_IDX(index, 0, channel),			\
-		.dma_cfg = {								\
-			.dma_slot = STM32_DMA_SLOT_BY_IDX(index, 0, slot),		\
-			.channel_direction = STM32_DMA_CONFIG_DIRECTION(		\
-				STM32_DMA_CHANNEL_CONFIG_BY_IDX(index, 0)),		\
-			.source_data_size = STM32_DMA_CONFIG_##src_dev##_DATA_SIZE(	\
-				STM32_DMA_CHANNEL_CONFIG_BY_IDX(index, 0)),		\
-			.dest_data_size = STM32_DMA_CONFIG_##dest_dev##_DATA_SIZE(	\
-				STM32_DMA_CHANNEL_CONFIG_BY_IDX(index, 0)),		\
-			.source_burst_length = 1,       /* SINGLE transfer */		\
-			.dest_burst_length = 1,         /* SINGLE transfer */	\
-			.channel_priority = STM32_DMA_CONFIG_PRIORITY(			\
-				STM32_DMA_CHANNEL_CONFIG_BY_IDX(index, 0)),		\
-			.dma_callback = dma_callback,					\
-			.complete_callback_en = 1, /* Callback at each block */		\
-			.block_count = 1,						\
-		},									\
-		.src_addr_increment = STM32_DMA_CONFIG_##src_dev##_ADDR_INC(		\
-			STM32_DMA_CHANNEL_CONFIG_BY_IDX(index, 0)),			\
-		.dst_addr_increment = STM32_DMA_CONFIG_##dest_dev##_ADDR_INC(		\
-			STM32_DMA_CHANNEL_CONFIG_BY_IDX(index, 0)),			\
+#define FMAC_DMA_CHANNEL_INIT(index, src_dev, dest_dev)                                            \
+	.dma = {                                                                                   \
+		.dma_dev = DEVICE_DT_GET(DT_INST_DMAS_CTLR_BY_IDX(index, 0)),                      \
+		.channel = DT_INST_DMAS_CELL_BY_IDX(index, 0, channel),                            \
+		.dma_cfg =                                                                         \
+			{                                                                          \
+				.dma_slot = STM32_DMA_SLOT_BY_IDX(index, 0, slot),                 \
+				.channel_direction = STM32_DMA_CONFIG_DIRECTION(                   \
+					STM32_DMA_CHANNEL_CONFIG_BY_IDX(index, 0)),                \
+				.source_data_size = STM32_DMA_CONFIG_##src_dev##_DATA_SIZE(        \
+					STM32_DMA_CHANNEL_CONFIG_BY_IDX(index, 0)),                \
+				.dest_data_size = STM32_DMA_CONFIG_##dest_dev##_DATA_SIZE(         \
+					STM32_DMA_CHANNEL_CONFIG_BY_IDX(index, 0)),                \
+				.source_burst_length = 1, /* SINGLE transfer */                    \
+				.dest_burst_length = 1,   /* SINGLE transfer */                    \
+				.channel_priority = STM32_DMA_CONFIG_PRIORITY(                     \
+					STM32_DMA_CHANNEL_CONFIG_BY_IDX(index, 0)),                \
+				.dma_callback = dma_callback,                                      \
+				.complete_callback_en = 1, /* Callback at each block */            \
+				.block_count = 1,                                                  \
+			},                                                                         \
+		.src_addr_increment = STM32_DMA_CONFIG_##src_dev##_ADDR_INC(                       \
+			STM32_DMA_CHANNEL_CONFIG_BY_IDX(index, 0)),                                \
+		.dst_addr_increment = STM32_DMA_CONFIG_##dest_dev##_ADDR_INC(                      \
+			STM32_DMA_CHANNEL_CONFIG_BY_IDX(index, 0)),                                \
 	}
 
-#define STM32_FMAC_INIT(id)							\
-										\
-static const struct stm32_pclken pclken_##id[] =				\
-					       STM32_DT_INST_CLOCKS(id);	\
-										\
-static const struct fmac_stm32_config fmac_stm32_cfg_##id = {			\
-	.pclken = pclken_##id,							\
-	.pclk_len = DT_INST_NUM_CLOCKS(id),					\
-	.reset = RESET_DT_SPEC_INST_GET(id),					\
-};										\
-										\
-static struct fmac_stm32_data fmac_stm32_data_##id = {				\
-	.fmac = (FMAC_TypeDef *)DT_INST_REG_ADDR(id), 				\
-	.op = (enum fmac_op)DT_ENUM_IDX_OR(id, operation, 0),			\
-	.x1_wm = DT_INST_PROP_OR(id, x1_wm, 1),					\
-	.x1_size = DT_INST_PROP_OR(id, x1_size, 4),				\
-	.x2_size = DT_INST_PROP_OR(id, x2_size, 248),				\
-	.y_wm = DT_INST_PROP_OR(id, y_wm, 1),					\
-	.y_size = DT_INST_PROP_OR(id, y_size, 4),				\
-	.lshift = DT_INST_PROP_OR(id, lshift, 0),				\
-	.feedback_coeffs = DT_INST_PROP_OR(id, feedback_coeffs, 0),		\
-	.continuous = true,							\
-	.clip = DT_INST_PROP_OR(id, clip, 1),					\
-	FMAC_DMA_CHANNEL_INIT(id, MEMORY, PERIPHERAL)				\
-};										\
-										\
-DEVICE_DT_INST_DEFINE(id,							\
-		    &fmac_stm32_init, NULL,					\
-		    &fmac_stm32_data_##id, &fmac_stm32_cfg_##id,		\
-		    POST_KERNEL, CONFIG_DAC_INIT_PRIORITY,			\
-		    NULL)
+#define STM32_FMAC_INIT(id)                                                                        \
+                                                                                                   \
+	static const struct stm32_pclken pclken_##id[] = STM32_DT_INST_CLOCKS(id);                 \
+                                                                                                   \
+	static const struct fmac_stm32_config fmac_stm32_cfg_##id = {                              \
+		.pclken = pclken_##id,                                                             \
+		.pclk_len = DT_INST_NUM_CLOCKS(id),                                                \
+		.reset = RESET_DT_SPEC_INST_GET(id),                                               \
+	};                                                                                         \
+                                                                                                   \
+	static struct fmac_stm32_data fmac_stm32_data_##id = {                                     \
+		.fmac = (FMAC_TypeDef *)DT_INST_REG_ADDR(id),                                      \
+		.op = (enum fmac_op)DT_ENUM_IDX_OR(id, operation, 0),                              \
+		.x1_wm = DT_INST_PROP_OR(id, x1_wm, 1),                                            \
+		.x1_size = DT_INST_PROP_OR(id, x1_size, 4),                                        \
+		.x2_size = DT_INST_PROP_OR(id, x2_size, 248),                                      \
+		.y_wm = DT_INST_PROP_OR(id, y_wm, 1),                                              \
+		.y_size = DT_INST_PROP_OR(id, y_size, 4),                                          \
+		.lshift = DT_INST_PROP_OR(id, lshift, 0),                                          \
+		.feedback_coeffs = DT_INST_PROP_OR(id, feedback_coeffs, 0),                        \
+		.continuous = true,                                                                \
+		.clip = DT_INST_PROP_OR(id, clip, 1),                                              \
+		FMAC_DMA_CHANNEL_INIT(id, MEMORY, PERIPHERAL)};                                    \
+                                                                                                   \
+	DEVICE_DT_INST_DEFINE(id, &fmac_stm32_init, NULL, &fmac_stm32_data_##id,                   \
+			      &fmac_stm32_cfg_##id, POST_KERNEL, CONFIG_DAC_INIT_PRIORITY, NULL)
 
 DT_INST_FOREACH_STATUS_OKAY(STM32_FMAC_INIT)

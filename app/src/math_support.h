@@ -4,97 +4,105 @@
 #include <arm_math.h>
 #include <stdint.h>
 
-#define M_PI_F		3.14159265358979323846f
-#define M_PI_D		3.14159265358979323846
+#define M_PI_F 3.14159265358979323846f
+#define M_PI_D 3.14159265358979323846
 
 /* Copied from arm_float_to_q15 and adapted to a single value */
-static inline q15_t arm_float_to_q15_once(float32_t in) {
-	return (q15_t) __SSAT((q31_t) (in * 32768.0f), 16);
+static inline q15_t arm_float_to_q15_once(float32_t in)
+{
+	return (q15_t)__SSAT((q31_t)(in * 32768.0f), 16);
 }
 
-static inline q15_t arm_float_to_q15_once_round(float32_t in) {
-	return (q15_t) __SSAT((q31_t) (in * 32768.0f + 0.5f), 16);
+static inline q15_t arm_float_to_q15_once_round(float32_t in)
+{
+	return (q15_t)__SSAT((q31_t)(in * 32768.0f + 0.5f), 16);
 }
 
 /* Copied from arm_float_to_q31 and adapted to a single value */
-static inline q31_t arm_float_to_q31_once(float32_t in) {
-        return clip_q63_to_q31((q63_t) (in * 2147483648.0f));
+static inline q31_t arm_float_to_q31_once(float32_t in)
+{
+	return clip_q63_to_q31((q63_t)(in * 2147483648.0f));
 }
 
-static inline q15_t arm_q31_to_q15_once(q31_t in) {
-    return (q15_t) (in >> 16);
+static inline q15_t arm_q31_to_q15_once(q31_t in)
+{
+	return (q15_t)(in >> 16);
 }
 
 /* Copied from arm_cmplx_mag_fast_q15. Increments pSrc by 2 */
-static inline q15_t arm_cmplx_mag_q15_once_ai(q15_t **pSrc) {
-        q15_t result;
-#if defined (ARM_MATH_DSP)
-        q31_t in = read_q15x2_ia (pSrc);
-        q31_t acc0 = __SMUAD(in, in);
+static inline q15_t arm_cmplx_mag_q15_once_ai(q15_t **pSrc)
+{
+	q15_t result;
+#if defined(ARM_MATH_DSP)
+	q31_t in = read_q15x2_ia(pSrc);
+	q31_t acc0 = __SMUAD(in, in);
 
-        /* store result in 2.14 format in destination buffer. */
-        arm_sqrt_q15((q15_t) (acc0 >> 17), &result);
+	/* store result in 2.14 format in destination buffer. */
+	arm_sqrt_q15((q15_t)(acc0 >> 17), &result);
 #else
-        q15_t real = *pSrc++;
-        q15_t imag = *pSrc++;
-        q31_t acc0 = ((q31_t) real * real);
-        q31_t acc1 = ((q31_t) imag * imag);
+	q15_t real = *pSrc++;
+	q15_t imag = *pSrc++;
+	q31_t acc0 = ((q31_t)real * real);
+	q31_t acc1 = ((q31_t)imag * imag);
 
-        /* store result in 2.14 format in destination buffer. */
-        arm_sqrt_q15((q15_t) (((q63_t) acc0 + acc1) >> 17), &result);
+	/* store result in 2.14 format in destination buffer. */
+	arm_sqrt_q15((q15_t)(((q63_t)acc0 + acc1) >> 17), &result);
 #endif
-        return result;
+	return result;
 }
 
 /* Same as above but does not increment pSrc. */
-static inline q15_t arm_cmplx_mag_q15_once_ni(q15_t *pSrc) {
-        q15_t result;
-#if defined (ARM_MATH_DSP)
-        q31_t in = read_q15x2 (pSrc);
-        q31_t acc0 = __SMUAD(in, in);
+static inline q15_t arm_cmplx_mag_q15_once_ni(q15_t *pSrc)
+{
+	q15_t result;
+#if defined(ARM_MATH_DSP)
+	q31_t in = read_q15x2(pSrc);
+	q31_t acc0 = __SMUAD(in, in);
 
-        /* store result in 2.14 format in destination buffer. */
-        arm_sqrt_q15((q15_t) (acc0 >> 17), &result);
+	/* store result in 2.14 format in destination buffer. */
+	arm_sqrt_q15((q15_t)(acc0 >> 17), &result);
 #else
-        q15_t real = *pSrc++;
-        q15_t imag = *pSrc++;
-        q31_t acc0 = ((q31_t) real * real);
-        q31_t acc1 = ((q31_t) imag * imag);
+	q15_t real = *pSrc++;
+	q15_t imag = *pSrc++;
+	q31_t acc0 = ((q31_t)real * real);
+	q31_t acc1 = ((q31_t)imag * imag);
 
-        /* store result in 2.14 format in destination buffer. */
-        arm_sqrt_q15((q15_t) (((q63_t) acc0 + acc1) >> 17), &result);
+	/* store result in 2.14 format in destination buffer. */
+	arm_sqrt_q15((q15_t)(((q63_t)acc0 + acc1) >> 17), &result);
 #endif
-        return result;
+	return result;
 }
 
-static inline q15_t arm_cmplx_mag_sq_q15_once_ni(q15_t *pSrc) {
-        q15_t result;
-#if defined (ARM_MATH_DSP)
-        q31_t in = read_q15x2 (pSrc);
-        q31_t acc0 = __SMUAD(in, in);
+static inline q15_t arm_cmplx_mag_sq_q15_once_ni(q15_t *pSrc)
+{
+	q15_t result;
+#if defined(ARM_MATH_DSP)
+	q31_t in = read_q15x2(pSrc);
+	q31_t acc0 = __SMUAD(in, in);
 
-        /* store result in 2.14 format in destination buffer. */
-        return (q15_t) (acc0 >> 17);
+	/* store result in 2.14 format in destination buffer. */
+	return (q15_t)(acc0 >> 17);
 #else
-        q15_t real = *pSrc++;
-        q15_t imag = *pSrc++;
-        q31_t acc0 = ((q31_t) real * real);
-        q31_t acc1 = ((q31_t) imag * imag);
+	q15_t real = *pSrc++;
+	q15_t imag = *pSrc++;
+	q31_t acc0 = ((q31_t)real * real);
+	q31_t acc1 = ((q31_t)imag * imag);
 
-        /* store result in 2.14 format in destination buffer. */
-        return (q15_t) (((q63_t) acc0 + acc1) >> 17);
+	/* store result in 2.14 format in destination buffer. */
+	return (q15_t)(((q63_t)acc0 + acc1) >> 17);
 #endif
-        return result;
+	return result;
 }
 
-static inline q31_t arm_cmplx_mag_sq_q31_once_ni(q31_t *pSrc) {
-    q31_t real = *pSrc++;
-    q31_t imag = *pSrc++;
-    q31_t acc0 = (q31_t) (((q63_t) real * real) >> 33);
-    q31_t acc1 = (q31_t) (((q63_t) imag * imag) >> 33);
+static inline q31_t arm_cmplx_mag_sq_q31_once_ni(q31_t *pSrc)
+{
+	q31_t real = *pSrc++;
+	q31_t imag = *pSrc++;
+	q31_t acc0 = (q31_t)(((q63_t)real * real) >> 33);
+	q31_t acc1 = (q31_t)(((q63_t)imag * imag) >> 33);
 
-    /* store result in 3.29 format in destination buffer. */
-    return acc0 + acc1;
+	/* store result in 3.29 format in destination buffer. */
+	return acc0 + acc1;
 }
 
 /* TODO: I think the q15/q31 ranges don't actually include 1.0... */

@@ -3,13 +3,13 @@
 
 #include <stdint.h>
 
-#define AUDIO_TIMER_HZ          48000
-#define AUDIO_OVERSAMPLE        16
+#define AUDIO_TIMER_HZ   48000
+#define AUDIO_OVERSAMPLE 16
 
 /**
  * The size of the FFT in real samples.
  */
-#define FFT_SIZE        1024
+#define FFT_SIZE 1024
 
 /**
  * The natural log base 2 of `INV_OVERLAP`.
@@ -20,13 +20,12 @@
  * The inverse of one minus the window overlap amount. If the overlap is 75%, the
  * inverse overlap is 4.
  */
-#define INV_OVERLAP     (1 << INV_OVERLAP_BITS)
-
+#define INV_OVERLAP (1 << INV_OVERLAP_BITS)
 
 /**
  * The size of the window overlap in real samples.
  */
-#define OVERLAP_SAMPLES	(FFT_SIZE/INV_OVERLAP)
+#define OVERLAP_SAMPLES (FFT_SIZE / INV_OVERLAP)
 
 typedef int16_t audio_raw_t;
 
