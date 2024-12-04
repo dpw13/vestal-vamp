@@ -27,9 +27,9 @@ struct opamp_stm32_data {
 
 static int opamp_stm32_init(const struct device *dev)
 {
-	struct opamp_stm32_data *data = dev->data;
-	const struct opamp_stm32_config *cfg = dev->config;
-	HAL_StatusTypeDef ret;
+	struct opamp_stm32_data *data = (struct opamp_stm32_data *)dev->data;
+	const struct opamp_stm32_config *cfg = (const struct opamp_stm32_config *)dev->config;
+	ErrorStatus ret;
 	int err;
 
 	if (!device_is_ready(DEVICE_DT_GET(STM32_CLOCK_CONTROL_NODE))) {
@@ -46,7 +46,7 @@ static int opamp_stm32_init(const struct device *dev)
 	}
 
 	ret = LL_OPAMP_Init(data->opamp, &cfg->init);
-	if (ret != HAL_OK) {
+	if (ret != SUCCESS) {
 		LOG_ERR("Failed to initialize Opamp");
 		return ret;
 	}

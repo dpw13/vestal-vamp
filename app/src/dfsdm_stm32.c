@@ -67,7 +67,7 @@ static void dma_callback(const struct device *dev, void *user_data,
 			 uint32_t channel, int status)
 {
 	/* user_data directly holds the dfsdm device */
-	struct dfsdm_stm32_data *data = user_data;
+	struct dfsdm_stm32_data *data = (struct dfsdm_stm32_data *)user_data;
 
 	if (channel == data->dma.channel) {
 		if (status >= 0) {
@@ -100,13 +100,13 @@ static void dma_callback(const struct device *dev, void *user_data,
 static int dfsdm_stm32_dma_start(const struct device *dev,
 			       void *buffer, size_t buffer_len)
 {
-	struct dfsdm_stm32_data *data = dev->data;
+	struct dfsdm_stm32_data *data = (struct dfsdm_stm32_data *)dev->data;
 	struct dma_block_config *blk_cfg;
 	int ret;
 
 	struct stream *dma = &data->dma;
 
-	data->buffer = buffer;
+	data->buffer = (uint8_t *)buffer;
 	data->buffer_len = buffer_len;
 
 	blk_cfg = &dma->dma_blk_cfg;
@@ -160,10 +160,10 @@ static int dfsdm_stm32_dma_start(const struct device *dev,
 }
 
 int dfsdm_stm32_start(const struct device *dev, void *buffer, size_t buffer_len, dfsdm_dma_callback cb) {
-	struct dfsdm_stm32_data *data = dev->data;
+	struct dfsdm_stm32_data *data = (struct dfsdm_stm32_data *)dev->data;
 	HAL_StatusTypeDef ret;
 
-	data->buffer = buffer;
+	data->buffer = (uint8_t *)buffer;
 	data->buffer_len = buffer_len;
 	data->callback = cb;
 	dfsdm_stm32_dma_start(dev, buffer, buffer_len);
@@ -178,8 +178,8 @@ int dfsdm_stm32_start(const struct device *dev, void *buffer, size_t buffer_len,
 
 static int dfsdm_stm32_init(const struct device *dev)
 {
-	struct dfsdm_stm32_data *data = dev->data;
-	const struct dfsdm_stm32_config *cfg = dev->config;
+	struct dfsdm_stm32_data *data = (struct dfsdm_stm32_data *)dev->data;
+	const struct dfsdm_stm32_config *cfg = (const struct dfsdm_stm32_config *)dev->config;
 	HAL_StatusTypeDef ret;
 	int err;
 
@@ -201,10 +201,10 @@ static int dfsdm_stm32_init(const struct device *dev)
 		return -ENODEV;
 	}
 
-	ret = reset_line_toggle(cfg->reset.dev, cfg->reset.id);
-	if (ret != 0) {
+	err = reset_line_toggle(cfg->reset.dev, cfg->reset.id);
+	if (err != 0) {
 		LOG_ERR("DFSDM reset failed");
-		return ret;
+		return err;
 	}
 
 	ret = HAL_DFSDM_ChannelInit(&data->channel);
@@ -300,7 +300,7 @@ static struct dfsdm_stm32_data dfsdm_stm32_data_##id = {			\
 		},								\
 	},									\
 	.continuous = true,							\
-	.sinc_order = DT_INST_PROP_OR(id, sinc_order, 3),			\
+	.sinc_order = (enum sinc_order_t)DT_ENUM_IDX_OR(id, sinc_order, 0),	\
 	.sinc_oversample = DT_INST_PROP_OR(id, sinc_oversample, 16),		\
 	.intg_oversample = DT_INST_PROP_OR(id, intg_oversample, 1),		\
 	DFSDM_DMA_CHANNEL_INIT(id, PERIPHERAL, MEMORY)				\

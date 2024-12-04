@@ -136,7 +136,7 @@
 	dma-names = "rx";
 	status = "okay";
 
-	sinc_order = <4>;
+	sinc_order = "sinc4";
 	intg_oversample = <1>;
 	sinc_oversample = <16>;
 	rshift = <8>;
@@ -155,6 +155,7 @@
 	y_size = <4>;
 	x2_size = <124>;
 
+	operation = "convolution";
 	lshift = <0>;
 	clip;
 };

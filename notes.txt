@@ -52,13 +52,9 @@ and just the application the vv repo.
 (gdb) continue
 
 # TODO Remaining
-- opamp (input and output)
-        - pga settings
-- FMAC (output upsampling)
 - DFSDM (input filtering)
         - monitor extremes
-- ADC offset correction
-- DAC offset correction
+x DAC offset correction
 
 - optimization: CORDIC DMA for rect to polar in fft_dma and polar to rect in ifft_dma
         - possibly vectorize some of the computation in ifft_dma (phase subtraction, scaling, interpolation)
@@ -85,6 +81,11 @@ fmac wdata:
         devmem 48024018
 timer6 trig:
         devmem 40001014 32 1
+
+adc out:
+        devmem 40022040
+dfsdm in:
+        devmem 40017810
 
 With a dac_buffer value of 0x0010 and FMAC left shift of 6, we see (what appears to be) the minimum LSB of the DAC. This
 may be affected by being so near the negative rail. This is all with 16x oversampling with a single FMAC coeff of 0x7FFF.

@@ -24,4 +24,5 @@ target_sources(app PRIVATE
         src/opamp_stm32.c
 )
 
+#zephyr_library_compile_options("-Wc++-compat")
 #zephyr_library_compile_options("-E")

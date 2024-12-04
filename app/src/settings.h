@@ -18,7 +18,7 @@ enum setting_type {
 #define VV_FLAG_LIN_SCALE       0
 
 #define VV_TYPE_MASK            (0x7 << 4)
-#define VV_GET_TYPE(flags)      ((enum setting_type)((flags) & VV_TYPE_MASK) >> 4)
+#define VV_GET_TYPE(flags)      ((enum setting_type)(((flags) & VV_TYPE_MASK) >> 4))
 #define VV_SET_TYPE(t)          (((t) & 0x7) << 4)
 
 union setting_value {
