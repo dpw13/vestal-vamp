@@ -23,9 +23,7 @@ struct stream {
 	uint32_t channel;
 	struct dma_config dma_cfg;
 	struct dma_block_config dma_blk_cfg;
-	uint8_t priority;
-	bool src_addr_increment;
-	bool dst_addr_increment;
+	uint8_t mem_burst;
 };
 
 struct cordic_stm32_config {
@@ -43,13 +41,85 @@ struct cordic_stm32_data {
 	struct stream dma_rx;
 	volatile int dma_error;
 
-	void *buffer_tx;
-	void *buffer_rx;
-	size_t buffer_len;
-
-	cordic_dma_callback callback_tx;
-	cordic_dma_callback callback_rx;
+	const struct cordic_cmd *cmd;
 };
+
+/* Returns the number of arguments for each function. See CORDIC documentation
+ * for the associated STM32.
+ */
+static inline int cordic_arg_count(enum cordic_func func)
+{
+	switch (func) {
+	case CORDIC_FUNC_COSINE:
+	case CORDIC_FUNC_SINE:
+	case CORDIC_FUNC_PHASE:
+	case CORDIC_FUNC_MODULUS:
+		return 2;
+	case CORDIC_FUNC_ARCTANGENT:
+	case CORDIC_FUNC_HCOSINE:
+	case CORDIC_FUNC_HSINE:
+	case CORDIC_FUNC_HARCTANGENT:
+	case CORDIC_FUNC_NATURALLOG:
+	case CORDIC_FUNC_SQUAREROOT:
+		return 1;
+	}
+
+	LOG_ERR("Invalid CORDIC func");
+	return 0;
+}
+
+/* Returns the number of results for each function. See CORDIC documentation
+ * for the associated STM32.
+ */
+static inline int cordic_res_count(enum cordic_func func)
+{
+	switch (func) {
+	case CORDIC_FUNC_COSINE:
+	case CORDIC_FUNC_SINE:
+	case CORDIC_FUNC_PHASE:
+	case CORDIC_FUNC_MODULUS:
+	case CORDIC_FUNC_HCOSINE:
+	case CORDIC_FUNC_HSINE:
+		return 2;
+	case CORDIC_FUNC_ARCTANGENT:
+	case CORDIC_FUNC_HARCTANGENT:
+	case CORDIC_FUNC_NATURALLOG:
+	case CORDIC_FUNC_SQUAREROOT:
+		return 1;
+	}
+
+	LOG_ERR("Invalid CORDIC func");
+	return 0;
+}
+
+static inline int cordic_arg_width(const struct cordic_cmd *cmd)
+{
+	if (cmd->arg_format == CORDIC_FORMAT_32) {
+		return 2 * cordic_arg_count(cmd->func);
+	}
+	return cordic_arg_count(cmd->func);
+}
+
+static inline int cordic_res_width(const struct cordic_cmd *cmd)
+{
+	if (cmd->arg_format == CORDIC_FORMAT_32) {
+		return 2 * cordic_res_count(cmd->func);
+	}
+	return cordic_res_count(cmd->func);
+}
+
+static inline void cordic_config(CORDIC_TypeDef *cordic, const struct cordic_cmd *cmd)
+{
+	LL_CORDIC_Config(cordic, (uint32_t)cmd->func << CORDIC_CSR_FUNC_Pos,
+			 (uint32_t)cmd->iterations << CORDIC_CSR_PRECISION_Pos,
+			 (uint32_t)cmd->lshift << CORDIC_CSR_SCALE_Pos,
+			 cordic_arg_width(cmd) == 4 ? LL_CORDIC_NBWRITE_2 : LL_CORDIC_NBWRITE_1,
+			 cordic_res_width(cmd) == 4 ? LL_CORDIC_NBREAD_2 : LL_CORDIC_NBREAD_1,
+			 cmd->arg_format == CORDIC_FORMAT_16 ? LL_CORDIC_INSIZE_16BITS
+							     : LL_CORDIC_INSIZE_32BITS,
+			 cmd->res_format == CORDIC_FORMAT_16 ? LL_CORDIC_OUTSIZE_16BITS
+							     : LL_CORDIC_OUTSIZE_32BITS);
+}
 
 static void dma_tx_callback(const struct device *dev, void *user_data, uint32_t channel, int status)
 {
@@ -57,12 +127,7 @@ static void dma_tx_callback(const struct device *dev, void *user_data, uint32_t 
 	struct cordic_stm32_data *data = (struct cordic_stm32_data *)user_data;
 
 	if (channel == data->dma_tx.channel) {
-		if (data->callback_tx) {
-			data->callback_tx(dev, status);
-		}
-		if (status >= 0) {
-			LOG_DBG("status %d at %d samples", status, data->buffer_len);
-		} else if (status < 0) {
+		if (status < 0) {
 			LOG_ERR("DMA sampling complete, but DMA reported error %d", status);
 			data->dma_error = status;
 			LL_CORDIC_DisableDMAReq_WR(data->cordic);
@@ -77,12 +142,10 @@ static void dma_rx_callback(const struct device *dev, void *user_data, uint32_t 
 	struct cordic_stm32_data *data = (struct cordic_stm32_data *)user_data;
 
 	if (channel == data->dma_rx.channel) {
-		if (data->callback_rx) {
-			data->callback_rx(dev, status);
+		if (data->cmd->callback) {
+			data->cmd->callback(dev, status);
 		}
-		if (status >= 0) {
-			LOG_DBG("status %d at %d samples", status, data->buffer_len);
-		} else if (status < 0) {
+		if (status < 0) {
 			LOG_ERR("DMA sampling complete, but DMA reported error %d", status);
 			data->dma_error = status;
 			LL_CORDIC_DisableDMAReq_RD(data->cordic);
@@ -91,7 +154,7 @@ static void dma_rx_callback(const struct device *dev, void *user_data, uint32_t 
 	}
 }
 
-static int cordic_stm32_dma_start(const struct device *dev, void *buffer, size_t buffer_len,
+static int cordic_stm32_dma_start(const struct device *dev, const struct cordic_cmd *cmd,
 				  bool is_tx)
 {
 	struct cordic_stm32_data *data = (struct cordic_stm32_data *)dev->data;
@@ -102,29 +165,41 @@ static int cordic_stm32_dma_start(const struct device *dev, void *buffer, size_t
 
 	blk_cfg = &dma->dma_blk_cfg;
 
-	/* prepare the block */
-	blk_cfg->block_size = buffer_len;
-
-	/* Source and destination */
-
-	/* Use 16-bit access of LSB (add 2 for MSB) */
 	if (is_tx) {
+		blk_cfg->block_size = cmd->count * cordic_arg_width(data->cmd);
+
 		/* memory to peripheral */
-		blk_cfg->source_address = (uint32_t)buffer;
+		blk_cfg->source_address = (uint32_t)cmd->buffer_arg;
 		blk_cfg->source_addr_adj = DMA_ADDR_ADJ_INCREMENT;
+		dma->dma_cfg.source_data_size = 4;
+		dma->dma_cfg.source_burst_length = dma->mem_burst;
 
 		blk_cfg->dest_address = (uint32_t)&data->cordic->WDATA;
 		blk_cfg->dest_addr_adj = DMA_ADDR_ADJ_NO_CHANGE;
+		/* Perform 16-bit writes to the CORDIC block only if there's
+		 * only one 16-bit argument per operation.
+		 */
+		dma->dma_cfg.dest_data_size = cordic_arg_width(data->cmd) == 1 ? 2 : 4;
+		/* Only perform a single write per write request */
+		dma->dma_cfg.dest_burst_length = 1;
 	} else {
-		/* peripheral to memory */
-		blk_cfg->dest_address = (uint32_t)buffer;
-		blk_cfg->dest_addr_adj = DMA_ADDR_ADJ_INCREMENT;
+		blk_cfg->block_size = cmd->count * cordic_res_width(data->cmd);
 
+		/* peripheral to memory */
 		blk_cfg->source_address = (uint32_t)&data->cordic->RDATA;
 		blk_cfg->source_addr_adj = DMA_ADDR_ADJ_NO_CHANGE;
+		/* Same computation on the read side */
+		dma->dma_cfg.source_data_size = cordic_res_width(data->cmd) == 1 ? 2 : 4;
+		/* Only perform a single read per read request */
+		dma->dma_cfg.source_burst_length = 1;
+
+		blk_cfg->dest_address = (uint32_t)cmd->buffer_res;
+		blk_cfg->dest_addr_adj = DMA_ADDR_ADJ_INCREMENT;
+		dma->dma_cfg.dest_data_size = 4;
+		dma->dma_cfg.dest_burst_length = dma->mem_burst;
 	}
-	blk_cfg->source_reload_en = 1;
-	blk_cfg->dest_reload_en = 1;
+	blk_cfg->source_reload_en = 0;
+	blk_cfg->dest_reload_en = 0;
 
 	/* Manually set the FIFO threshold to 1/4 because the
 	 * dmamux DTS entry does not contain fifo threshold
@@ -158,24 +233,18 @@ static int cordic_stm32_dma_start(const struct device *dev, void *buffer, size_t
 	return ret;
 }
 
-int cordic_stm32_start(const struct device *dev, void *buffer_tx, void *buffer_rx,
-		       size_t buffer_len, cordic_dma_callback cb)
+int cordic_stm32_start(const struct device *dev, const struct cordic_cmd *cmd)
 {
 	struct cordic_stm32_data *data = (struct cordic_stm32_data *)dev->data;
 
-	data->buffer_tx = buffer_tx;
-	data->buffer_rx = buffer_rx;
-	data->buffer_len = buffer_len;
-	data->callback_tx = cb;
-	data->callback_rx = cb;
-	cordic_stm32_dma_start(dev, buffer_rx, buffer_len, false);
-	cordic_stm32_dma_start(dev, buffer_tx, buffer_len, true);
+	data->cmd = cmd;
 
-	/* Enable interrupts */
-	LL_CORDIC_EnableIT(data->cordic);
+	cordic_stm32_dma_start(dev, cmd, false);
+	cordic_stm32_dma_start(dev, cmd, true);
 
-	/* Start DMA and enable DMA write request */
+	/* Enable DMA read and write requests */
 	LL_CORDIC_EnableDMAReq_WR(data->cordic);
+	LL_CORDIC_EnableDMAReq_RD(data->cordic);
 
 	LOG_DBG("CORDIC started");
 	return 0;
@@ -183,9 +252,7 @@ int cordic_stm32_start(const struct device *dev, void *buffer_tx, void *buffer_r
 
 static int cordic_stm32_init(const struct device *dev)
 {
-	struct cordic_stm32_data *data = (struct cordic_stm32_data *)dev->data;
 	const struct cordic_stm32_config *cfg = (const struct cordic_stm32_config *)dev->config;
-	ErrorStatus ll_ret;
 	int err;
 
 	if (!device_is_ready(DEVICE_DT_GET(STM32_CLOCK_CONTROL_NODE))) {
@@ -212,50 +279,30 @@ static int cordic_stm32_init(const struct device *dev)
 		return err;
 	}
 
-	/*
-		uint32_t Precision,
-		uint32_t Scale,
-		uint32_t NbWrite,
-		uint32_t NbRead,
-		uint32_t InSize,
-		uint32_t OutSize
-	*/
-	//ll_ret = LL_CORDIC_Config(data->cordic);
-	if (ll_ret != SUCCESS) {
-		LOG_ERR("Failed to initialize CORDIC filter channel");
-		return (int)ll_ret;
-	}
-
 	LOG_DBG("%s: init complete", dev->name);
 
 	return 0;
 }
 
 #define CORDIC_DMA_CHANNEL_INIT(index, src_dev, dest_dev, name)                                    \
-	.dma##name = {                                                                             \
+	.dma_##name = {                                                                            \
 		.dma_dev = DEVICE_DT_GET(DT_INST_DMAS_CTLR_BY_NAME(index, name)),                  \
 		.channel = DT_INST_DMAS_CELL_BY_NAME(index, name, channel),                        \
+		.mem_burst = 4,                                                                    \
 		.dma_cfg =                                                                         \
 			{                                                                          \
-				.dma_slot = STM32_DMA_SLOT_BY_NAME(index, name, slot),             \
+				.dma_slot = STM32_DMA_SLOT(index, name, slot),                     \
 				.channel_direction = STM32_DMA_CONFIG_DIRECTION(                   \
-					STM32_DMA_CHANNEL_CONFIG_BY_NAME(index, name)),            \
+					STM32_DMA_CHANNEL_CONFIG(index, name)),                    \
 				.source_data_size = STM32_DMA_CONFIG_##src_dev##_DATA_SIZE(        \
-					STM32_DMA_CHANNEL_CONFIG_BY_NAME(index, name)),            \
+					STM32_DMA_CHANNEL_CONFIG(index, name)),                    \
 				.dest_data_size = STM32_DMA_CONFIG_##dest_dev##_DATA_SIZE(         \
-					STM32_DMA_CHANNEL_CONFIG_BY_NAME(index, name)),            \
-				.source_burst_length = 1, /* SINGLE transfer */                    \
-				.dest_burst_length = 1,   /* SINGLE transfer */                    \
+					STM32_DMA_CHANNEL_CONFIG(index, name)),                    \
 				.channel_priority = STM32_DMA_CONFIG_PRIORITY(                     \
-					STM32_DMA_CHANNEL_CONFIG_BY_NAME(index, name)),            \
+					STM32_DMA_CHANNEL_CONFIG(index, name)),                    \
 				.dma_callback = dma_##name##_callback,                             \
-				.complete_callback_en = 1, /* Callback at each block */            \
 				.block_count = 1,                                                  \
 			},                                                                         \
-		.src_addr_increment = STM32_DMA_CONFIG_##src_dev##_ADDR_INC(                       \
-			STM32_DMA_CHANNEL_CONFIG_BY_NAME(index, name)),                            \
-		.dst_addr_increment = STM32_DMA_CONFIG_##dest_dev##_ADDR_INC(                      \
-			STM32_DMA_CHANNEL_CONFIG_BY_NAME(index, name)),                            \
 	}
 
 #define STM32_CORDIC_INIT(id)                                                                      \
@@ -270,21 +317,11 @@ static int cordic_stm32_init(const struct device *dev)
                                                                                                    \
 	static struct cordic_stm32_data cordic_stm32_data_##id = {                                 \
 		.cordic = (CORDIC_TypeDef *)DT_INST_REG_ADDR(id),                                  \
-		.op = (enum cordic_op)DT_ENUM_IDX_OR(id, operation, 0),                            \
-		.x1_wm = DT_INST_PROP_OR(id, x1_wm, 1),                                            \
-		.x1_size = DT_INST_PROP_OR(id, x1_size, 4),                                        \
-		.x2_size = DT_INST_PROP_OR(id, x2_size, 248),                                      \
-		.y_wm = DT_INST_PROP_OR(id, y_wm, 1),                                              \
-		.y_size = DT_INST_PROP_OR(id, y_size, 4),                                          \
-		.lshift = DT_INST_PROP_OR(id, lshift, 0),                                          \
-		.feedback_coeffs = DT_INST_PROP_OR(id, feedback_coeffs, 0),                        \
-		.continuous = true,                                                                \
-		.clip = DT_INST_PROP_OR(id, clip, 1),                                              \
 		CORDIC_DMA_CHANNEL_INIT(id, MEMORY, PERIPHERAL, tx),                               \
 		CORDIC_DMA_CHANNEL_INIT(id, PERIPHERAL, MEMORY, rx),                               \
 	};                                                                                         \
                                                                                                    \
 	DEVICE_DT_INST_DEFINE(id, &cordic_stm32_init, NULL, &cordic_stm32_data_##id,               \
-			      &cordic_stm32_cfg_##id, POST_KERNEL, CONFIG_DAC_INIT_PRIORITY, NULL)
+			      &cordic_stm32_cfg_##id, POST_KERNEL, CONFIG_DMA_INIT_PRIORITY, NULL)
 
 DT_INST_FOREACH_STATUS_OKAY(STM32_CORDIC_INIT)

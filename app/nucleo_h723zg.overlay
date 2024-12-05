@@ -160,6 +160,14 @@
 	clip;
 };
 
+&cordic {
+	dmas = <&dmamux1 0 123 STM32_DMA_PERIPH_TX>,
+		<&dmamux1 1 122 STM32_DMA_PERIPH_RX>;
+	dma-names = "tx", "rx";
+	/* dmamux1 122 RD 123 WR */
+	status = "okay";
+};
+
 &adc1 {
 	#address-cells = <1>;
 	#size-cells = <0>;
