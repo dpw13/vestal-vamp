@@ -20,11 +20,11 @@ LOG_MODULE_REGISTER(fft_dma, LOG_LEVEL_INF);
  * an unaligned value causes corruption of memory after this buffer.
  */
 static q15_t fft_td_q15_buffer[FFT_SIZE] __aligned(32);
-static q31_t fft_td_q31_buffer[FFT_SIZE] Z_GENERIC_SECTION("DTCM") __aligned(32);
+static q31_t fft_td_q31_buffer[FFT_SIZE] Z_GENERIC_SECTION(DTCM) __aligned(32);
 
 /* A buffer to hold the raw complex frequency phasors. Note that the
  * algorithm requires an extra bin for DC/Nyquist frequencies. */
-static q31_t fft_fd_q31_samples[2 * FFT_SIZE + 2] Z_GENERIC_SECTION("DTCM") __aligned(32);
+static q31_t fft_fd_q31_samples[2 * FFT_SIZE + 2] Z_GENERIC_SECTION(DTCM) __aligned(32);
 static q15_t fft_fd_q15_samples[2 * FFT_SIZE + 2] __aligned(32);
 
 static void fft_dma_callback(const struct device *dev, void *user_data, uint32_t channel,
@@ -216,10 +216,10 @@ void precalc_polar_diff(struct polar_freq_data *dst)
 }
 
 /* FFT support structures */
-static arm_rfft_instance_q31 S;
+static arm_rfft_instance_q31 S Z_GENERIC_SECTION(DTCM);
 
 /* The windowing function. Ideally this would live in flash, not SRAM. */
-q15_t fft_window_func[FFT_SIZE] __aligned(32);
+q15_t fft_window_func[FFT_SIZE] __aligned(32) Z_GENERIC_SECTION(DTCM);
 
 /* Work handler to process display updates */
 void fft_work_handler(struct k_work *work)

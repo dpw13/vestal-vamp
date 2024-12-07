@@ -25,5 +25,8 @@ target_sources(app PRIVATE
         src/opamp_stm32.c
 )
 
+zephyr_code_relocate(LIBRARY modules__cmsis-dsp LOCATION ITCM_TEXT NOKEEP)
+zephyr_code_relocate(FILES src/fft_dma.c src/ifft_dma.c LOCATION ITCM_TEXT NOKEEP)
+
 #zephyr_library_compile_options("-Wc++-compat")
 #zephyr_library_compile_options("-E")

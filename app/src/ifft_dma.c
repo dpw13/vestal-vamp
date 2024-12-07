@@ -227,7 +227,7 @@ static void accum_ifft_output(void)
 }
 
 /* FFT support structures */
-static arm_rfft_instance_q31 Srev;
+static arm_rfft_instance_q31 Srev Z_GENERIC_SECTION(DTCM);
 /* Frequency buffer index */
 static frac_idx_t current_sample_idx;
 
