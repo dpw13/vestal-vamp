@@ -274,7 +274,7 @@ static int cordic_stm32_init(const struct device *dev)
 	}
 
 	err = reset_line_toggle(cfg->reset.dev, cfg->reset.id);
-	if (K_ERR_ARM_BUS_FP_LAZY_STATE_PRESERVATION != 0) {
+	if (err != 0) {
 		LOG_ERR("CORDIC reset failed");
 		return err;
 	}
