@@ -139,7 +139,7 @@
 	sinc_order = "sinc4";
 	intg_oversample = <1>;
 	sinc_oversample = <16>;
-	rshift = <8>;
+	rshift = <1>;
 };
 
 &fmac {

@@ -34,12 +34,16 @@ uint16_t upsample_buffer[4096] Z_GENERIC_SECTION("SRAM4") __aligned(32);
 
 /* TODO: move to stats */
 static uint32_t dfsdm_sample_count;
+static int32_t dfsdm_min;
+static int32_t dfsdm_max;
 static uint32_t fmac_sample_count;
 static uint16_t dac_sample_idx;
 
-static int dfsdm_cb(const struct device *dev, int status)
+static int dfsdm_cb(const struct device *dev, int status, int32_t min, int32_t max)
 {
 	dfsdm_sample_count += FFT_SIZE;
+	dfsdm_min = min;
+	dfsdm_max = max;
 	LOG_DBG("dfsdm_cb");
 
 	/* By the time we execute, the previous buffer is already being overwritten. We
@@ -189,7 +193,7 @@ int filter_start(void)
 
 int filter_stats(void)
 {
-	LOG_INF("%s: %d samples", dfsdm_dev->name, dfsdm_sample_count);
+	LOG_INF("%s: %d samples extrema %08x:%08x", dfsdm_dev->name, dfsdm_sample_count, dfsdm_min, dfsdm_max);
 	LOG_INF("%s: %d samples", fmac_dev->name, fmac_sample_count);
 
 	return 0;

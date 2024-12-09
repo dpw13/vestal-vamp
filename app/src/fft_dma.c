@@ -13,6 +13,8 @@
 #include "freq_buffer.h"
 #include "math_support.h"
 
+#define ENABLE_ANALYSIS	0
+
 LOG_MODULE_REGISTER(fft_dma, LOG_LEVEL_INF);
 
 /* The buffer of real ADC samples. Align to cache line size. */
@@ -39,7 +41,7 @@ static void fft_dma_callback(const struct device *dev, void *user_data, uint32_t
 static struct dma_def fft_dma_def = {
 	DT_DMA_DEF_BY_NAME(DT_PATH(zephyr_user), audio_in_dma, DMA_M2M_BURST, fft_dma_callback),
 	.dma_blk_cfg = {
-		.block_size = FFT_SIZE * sizeof(int16_t),
+		.block_size = FFT_SIZE * sizeof(audio_raw_t),
 
 		/* This initial value is overwritten, but set to non-null to avoid a warning
 		 * in `dma_config`. */
@@ -195,7 +197,7 @@ static uint8_t fft_lcl_idx;
 void precalc_polar_diff(struct polar_freq_data *dst)
 {
 	/* Compute magnitude */
-	arm_cmplx_mag_fast_q15(&fft_fd_q15_samples[2], &dst->mag[1], FFT_SIZE - 1);
+	arm_cmplx_mag_q15(&fft_fd_q15_samples[2], &dst->mag[1], FFT_SIZE - 1);
 
 	/* Pack real DC and Nyquist values into mag[0] and phase[0], respectively */
 	dst->mag[0] = fft_fd_q15_samples[0];
@@ -210,6 +212,11 @@ void precalc_polar_diff(struct polar_freq_data *dst)
 			/* Reset phase if the complex source is zero */
 			*dst_ptr = 0;
 		}
+		/* Normalize to +/- 0.5 bins. If we change to CORDIC this may need
+		 * to be updated, though hopefully the atan2 and sin/cos use the
+		 * same units, unlike arm_atan2_q15 and arm_sin/cos_q15
+		 */
+		*dst_ptr = ((q31_t)(65536.0f / M_PI_F) * dst_ptr[0]) >> 15;
 		cmplx_src += 2;
 		dst_ptr++;
 	}
@@ -221,16 +228,70 @@ static arm_rfft_instance_q31 S Z_GENERIC_SECTION(DTCM);
 /* The windowing function. Ideally this would live in flash, not SRAM. */
 q15_t fft_window_func[FFT_SIZE] __aligned(32) Z_GENERIC_SECTION(DTCM);
 
+static void analysis_td(void) {
+#if ENABLE_ANALYSIS
+	q31_t accum = 0;
+	q15_t max = 0x8000;
+	q15_t min = 0x7fff;
+	q15_t max_diff = 0;
+
+	for (int i=0; i<FFT_SIZE; i++) {
+		accum += fft_td_q15_buffer[i];
+		max = fft_td_q15_buffer[i] > max ? fft_td_q15_buffer[i] : max;
+		min = fft_td_q15_buffer[i] < min ? fft_td_q15_buffer[i] : min;
+
+		if (i > 0) {
+			q15_t d = fft_td_q15_buffer[i] - fft_td_q15_buffer[i-1];
+			if (d < 0)
+				d = -d;
+			if (d > max_diff)
+				max_diff = d;
+		}
+	}
+
+	LOG_INF("max %04x/mean %08x.%04x/min %04x delta %04x", (uint16_t)max, accum >> 10, (uint16_t)((accum & ~(~0 << 10)) << 6), (uint16_t)min, max_diff);
+#endif
+}
+
+static void analysis_fd(void) {
+#if ENABLE_ANALYSIS
+	q15_t max_mag = 0x8000;
+	int max_idx = 0;
+	struct polar_freq_data *buf = &lt_buffer[wr_idx];
+
+	for (int i=0; i<FFT_SIZE/2; i++) {
+		if (buf->mag[i] > max_mag) {
+			max_idx = i;
+			max_mag = buf->mag[i];
+		}
+	}
+
+	int j = max_idx < 2 ? 2 : max_idx;
+	LOG_INF("Peak at %03i %d %04hx | %04hx | %04hx | %04hx | %04hx %d", max_idx,
+		j - 2, buf->mag[j-2], buf->mag[j-1],
+		buf->mag[j],
+		buf->mag[j+1], buf->mag[j+2], j + 2);
+	LOG_INF("            %d %04hx | %04hx | %04hx | %04hx | %04hx %d",
+		j - 2, buf->phase[j-2], buf->phase[j-1],
+		buf->phase[j],
+		buf->phase[j+1], buf->phase[j+2], j + 2);
+#endif
+}
+
 /* Work handler to process display updates */
 void fft_work_handler(struct k_work *work)
 {
 	// LOG_DBG("Window start");
 	/* Invalidate cache; the waveform present in fft_td_q15_buffer is new. */
-	sys_cache_data_invd_range(&fft_td_q15_buffer[0], sizeof(audio_raw_t) * FFT_SIZE);
+	sys_cache_data_invd_range(&fft_td_q15_buffer[0], sizeof(q15_t) * FFT_SIZE);
+	analysis_td();
 	/* Apply window in-place to ADC samples */
 	arm_mult_q15(&fft_window_func[0], &fft_td_q15_buffer[0], &fft_td_q15_buffer[0], FFT_SIZE);
 	/* TODO: This is super inefficient */
 	arm_q15_to_q31(&fft_td_q15_buffer[0], &fft_td_q31_buffer[0], FFT_SIZE);
+	/* input time-domain samples are getting corrupted. Invalidate the cache in case a cache
+	 * flush before the next DMA completes is causing corruption. */
+	sys_cache_data_invd_range(&fft_td_q15_buffer[0], sizeof(q15_t) * FFT_SIZE);
 	LOG_DBG("FFT start");
 	arm_rfft_q31(&S, &fft_td_q31_buffer[0], &fft_fd_q31_samples[0]);
 	/* TODO: This is super inefficient */
@@ -242,6 +303,7 @@ void fft_work_handler(struct k_work *work)
 	/* I assume we can write directly to the destination buffer. This may need to
 	 * be an additional DMA instead. */
 	precalc_polar_diff(&lt_buffer[wr_idx]);
+	analysis_fd();
 	/* Increment the write index */
 	wr_idx = (wr_idx + 1) & WINDOW_IDX_MASK;
 	// LOG_DBG("FFT done");

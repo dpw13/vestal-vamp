@@ -13,6 +13,8 @@
 #include <arm_math.h>
 #include <arm_const_structs.h>
 
+#define ENABLE_ANALYSIS	0
+
 LOG_MODULE_REGISTER(ifft_dma, LOG_LEVEL_INF);
 
 /**
@@ -63,8 +65,8 @@ static void interp_freq(frac_idx_t idx, uint16_t pitch_shift)
 	uint32_t k;
 	uint32_t idx_i = idx_ipart(idx);
 	uint32_t idx_j = (idx_i + 1) & WINDOW_IDX_MASK;
-	uint16_t frac_b = (uint16_t)(idx_fpart(idx) >> 16);
-	uint16_t frac_a = (1u << 15) - frac_b;
+	uint16_t frac_b = idx_fpart(idx);
+	uint16_t frac_a = (0x7fff) - frac_b;
 
 	struct polar_freq_data *src_buf[2] = {
 		get_lt_buf(idx_i),
@@ -79,12 +81,15 @@ static void interp_freq(frac_idx_t idx, uint16_t pitch_shift)
 	}
 	// return;
 
-	/* Interpolate DC real content */
-	ifft_fd_buffer[0] =
-		((q31_t)src_buf[0]->mag[0]) * frac_a + ((q31_t)src_buf[1]->mag[0]) * frac_b;
+	/* Interpolate DC real content
+	 * Note that these equations are somewhat misleading. We are multiplying two q15s
+	 * to get a q31.
+	 */
+	ifft_fd_buffer[0] = mult_q15_to_q31(src_buf[0]->mag[0], frac_a) +
+		mult_q15_to_q31(src_buf[1]->mag[0], frac_b);
 	/* Nyquist real value is packed into index 0 of phase. Unpack to the expected index. */
 	ifft_fd_buffer[2 * FFT_SIZE] =
-		((q31_t)src_buf[0]->phase[0]) * frac_a + ((q31_t)src_buf[1]->phase[0]) * frac_b;
+		mult_q15_to_q31(src_buf[0]->phase[0], frac_a) + mult_q15_to_q31(src_buf[1]->phase[0], frac_b);
 
 	/* Calculate phase delta by subtracting the precalculated instantaneous phases.
 	 * Only do this for actual frequency bins and not bin 0.
@@ -99,18 +104,8 @@ static void interp_freq(frac_idx_t idx, uint16_t pitch_shift)
 	for (k = 1; k < FFT_SIZE; k++) {
 		/* Step 1: Calculate delta phase as (signed) Q2.13. Range (-pi, pi] */
 
-		/* Step 1a: Divide by 2*pi to get normalized phase in units of bins per window.
-		 * The range should be (-0.5, 0.5] cycles (0.16 fxp), representing a phase change
-		 * *per window* of (-pi, pi]. This allows us to subtract the expected phase
-		 * difference without having to explicitly wrap.
-		 *
-		 * (phase_b - phase_a): sQ3.13
-		 * *inv_two_pi: sQ0.31 (inv_two_pi should be uQ.18)
-		 * output: sQ0.15
-		 *
-		 * TODO: The CMSIS DSP functions appear to never round. Do we want to round here?
-		 */
-		q15_t phase = (q15_t)(((int32_t)(*phase_b++) - (*phase_a++)) * inv_two_pi >> 16);
+		/* Phase is already in units of bins */
+		q15_t phase = *phase_b++ - *phase_a++;
 
 		/* Step 1b: Subtract expected phase from overlapping windows. The phase should
 		 * be 1/INV_OVERLAP cycles. As a sanity check, we see that if INV_OVERLAP=1,
@@ -131,7 +126,11 @@ static void interp_freq(frac_idx_t idx, uint16_t pitch_shift)
 		inst_freq = (inst_freq * pitch_shift) >> 8;
 
 		/* Compute destination bin with rounding now that we have the target freq */
+#if 0
 		uint16_t dst_k = (inst_freq + (1 << 15)) >> 16;
+#else
+		uint16_t dst_k = k;
+#endif
 		if (dst_k > FFT_SIZE) {
 			/* Frequency is above Nyquist, discard */
 			continue;
@@ -148,7 +147,7 @@ static void interp_freq(frac_idx_t idx, uint16_t pitch_shift)
 		/* 5a: Compute interpolated magnitude. Everything up to this point
 		 * has only dealt with phase.
 		 */
-		q31_t mag = ((q31_t)*mag_a++) * frac_a + ((q31_t)*mag_b++) * frac_b;
+		q31_t mag = mult_q15_to_q31(*mag_a++, frac_a) + mult_q15_to_q31(*mag_b++, frac_b);
 
 		/* 5b: compute phasor from magnitude and phase and add into destination bin. */
 		/* The q15 fast cos takes as its input sQ0.15 in the range [0, 1) and will
@@ -159,8 +158,8 @@ static void interp_freq(frac_idx_t idx, uint16_t pitch_shift)
 		 * Here instead we accumulate the complex phasor, incorporating both magnitude
 		 * and phase.
 		 */
-		ifft_fd_buffer[2 * dst_k + 0] += mag * arm_cos_q15(phase); /* Real */
-		ifft_fd_buffer[2 * dst_k + 1] += mag * arm_sin_q15(phase); /* Imag */
+		ifft_fd_buffer[2 * dst_k + 0] += mult_q31(mag, arm_cos_q15(phase) << 16); /* Real */
+		ifft_fd_buffer[2 * dst_k + 1] += mult_q31(mag, arm_sin_q15(phase) << 16); /* Imag */
 	}
 }
 
@@ -185,9 +184,31 @@ static void recalc_phase(q15_t phase_reset_threshold)
 			arm_atan2_q31(src[1], src[0], &phase);
 			/* TODO: this radix point is almost certainly wrong */
 			/* TODO: use CORDIC and DMA */
-			*dst++ = (q15_t)(phase * inv_two_pi >> 16);
+			*dst++ = (q15_t)((phase * inv_two_pi) >> 16);
 		}
 		src += 2;
+	}
+}
+
+static void bypass_interp(frac_idx_t idx) {
+	struct polar_freq_data *src_buf = get_lt_buf(idx_ipart(idx));
+
+	//cache_data_invd_range(src_buf, sizeof(struct polar_freq_data));
+
+	q15_t *pphase = &src_buf->phase[1];
+	q15_t *pmag = &src_buf->mag[1];
+
+	ifft_fd_buffer[0] = src_buf->mag[0] << 16;
+	ifft_fd_buffer[1] = 0;
+	/* Nyquist real value is packed into index 0 of phase. Unpack to the expected index. */
+	ifft_fd_buffer[2 * FFT_SIZE] = src_buf->phase[0] << 16;
+	ifft_fd_buffer[2 * FFT_SIZE + 1] = 0;
+
+	for (int k = 1; k < FFT_SIZE; k++) {
+		q15_t mag = *pmag++;
+		q15_t phase = *pphase++;
+		ifft_fd_buffer[2 * k + 0] = mult_q15_to_q31(mag, arm_cos_q15(phase)); /* Real */
+		ifft_fd_buffer[2 * k + 1] = mult_q15_to_q31(mag, arm_sin_q15(phase)); /* Imag */
 	}
 }
 
@@ -226,6 +247,34 @@ static void accum_ifft_output(void)
 	active_win = (active_win + 1) & (2 * INV_OVERLAP - 1);
 }
 
+static void analysis_td(void) {
+#if ENABLE_ANALYSIS
+	q31_t accum = 0;
+	q15_t max = 0x8000;
+	q15_t min = 0x7fff;
+
+	for (int i=0; i<FFT_SIZE; i++) {
+		accum += ifft_td_q15_buffer[i];
+		max = ifft_td_q15_buffer[i] > max ? ifft_td_q15_buffer[i] : max;
+		min = ifft_td_q15_buffer[i] < min ? ifft_td_q15_buffer[i] : min;
+	}
+
+	LOG_INF("max %04x/mean %08x.%04x/min %04x", (uint16_t)max, accum >> 10, (uint16_t)((accum & ~(~0 << 10)) << 6), (uint16_t)min);
+#endif
+}
+
+static void analysis_fd(void) {
+#if ENABLE_ANALYSIS
+	int j = 2;
+	LOG_INF("%d %08x %08xi | %08x %08xi | %08x %08xi | %08x %08xi | %08x %08xi %d",
+		j - 2, ifft_fd_buffer[2*j - 4], ifft_fd_buffer[2*j - 3],
+		ifft_fd_buffer[2*j - 2], ifft_fd_buffer[2*j - 1],
+		ifft_fd_buffer[2*j], ifft_fd_buffer[2*j + 1],
+		ifft_fd_buffer[2*j + 2], ifft_fd_buffer[2*j + 3],
+		ifft_fd_buffer[2*j+4], ifft_fd_buffer[2*j+5], j + 2);
+#endif
+}
+
 /* FFT support structures */
 static arm_rfft_instance_q31 Srev Z_GENERIC_SECTION(DTCM);
 /* Frequency buffer index */
@@ -240,17 +289,23 @@ void ifft_work_handler(struct k_work *work)
 	frac_idx_t tune = FRAC_IDX_UNITY; // one in buffer per out buffer
 
 	current_sample_idx += tune;
+#if 0
 	// LOG_DBG("Interp start 0x%08x", current_sample_idx);
 	interp_freq(current_sample_idx, pitch_shift);
 	// LOG_DBG("Recalc phase");
 	recalc_phase(phase_reset_threshold);
+#else
+	bypass_interp(current_sample_idx);
+#endif
 	// LOG_DBG("FFT start %p to %p", &ifft_fd_buffer[0], &ifft_td_q31_buffer[0]);
+	analysis_fd();
 	arm_rfft_q31(&Srev, &ifft_fd_buffer[0], &ifft_td_q31_buffer[0]);
 	/* Clip, scale, and convert */
 	arm_clip_q31(&ifft_td_q31_buffer[0], &ifft_td_q31_buffer[0], (-1 << 24), (1 << 24),
 		     FFT_SIZE);
-	arm_shift_q31(&ifft_td_q31_buffer[0], 7, &ifft_td_q31_buffer[0], FFT_SIZE);
+	arm_shift_q31(&ifft_td_q31_buffer[0], 11, &ifft_td_q31_buffer[0], FFT_SIZE);
 	arm_q31_to_q15(&ifft_td_q31_buffer[0], &ifft_td_q15_buffer[0], FFT_SIZE);
+	analysis_td();
 	/* Apply window in-place to ADC samples */
 	// LOG_DBG("Window start");
 	arm_mult_q15(&fft_window_func[0], &ifft_td_q15_buffer[0], &ifft_td_q15_buffer[0], FFT_SIZE);

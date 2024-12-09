@@ -14,12 +14,13 @@
 #include "display.h"
 #include "io.h"
 #include "timer.h"
+#include "filter.h"
 #include "fft_dma.h"
 #include "ifft_dma.h"
 
 #include "settings.h"
 
-#define SLEEP_TIME_MS 500
+#define SLEEP_TIME_MS 750
 
 /* The devicetree node identifier for the "led1" alias. */
 #define LED_NODE DT_ALIAS(led1)
@@ -27,8 +28,8 @@
 static const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(LED_NODE, gpios);
 
 /* TODO:
-SPI to ioexp
-FFT/IFFT
+SPI to ioexp debug
+FFT/IFFT debug
 granular control
 */
 
@@ -102,6 +103,7 @@ int main(void)
 		// timer_stats();
 		// adc_stats();
 		// dac_stats();
+		//filter_stats();
 		k_msleep(SLEEP_TIME_MS);
 	}
 	return 0;

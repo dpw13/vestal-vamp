@@ -71,7 +71,13 @@ static void dma_callback(const struct device *dev, void *user_data, uint32_t cha
 	if (channel == data->dma.channel) {
 		if (status >= 0) {
 			LOG_DBG("status %d", status);
-			data->callback(dev, status);
+			/* HAL_DFSDM_FilterGetExdM??Value is unnecessarily complex for our single-
+			 * channel application, so just read the register. Data will be left-
+			 * aligned in the int32.
+			 */
+			int32_t min = data->filter.Instance->FLTEXMIN & DFSDM_FLTEXMIN_EXMIN;
+			int32_t max = data->filter.Instance->FLTEXMAX & DFSDM_FLTEXMAX_EXMAX;
+			data->callback(dev, status, min, max);
 			if (!data->continuous) {
 				/* Stop the DMA engine, only to start it again when the callback
 				 * returns DFSDM_ACTION_REPEAT or DFSDM_ACTION_CONTINUE, or the
@@ -85,7 +91,7 @@ static void dma_callback(const struct device *dev, void *user_data, uint32_t cha
 			data->dma_error = status;
 			HAL_DFSDM_FilterRegularStop(&data->filter);
 			dma_stop(data->dma.dma_dev, data->dma.channel);
-			data->callback(dev, status);
+			data->callback(dev, status, 0, 0);
 		}
 
 		if (data->filter.State == HAL_DFSDM_FILTER_STATE_ERROR) {
@@ -167,6 +173,9 @@ int dfsdm_stm32_start(const struct device *dev, void *buffer, size_t buffer_len,
 	data->callback = cb;
 	dfsdm_stm32_dma_start(dev, buffer, buffer_len);
 
+	/* Enable extrema tracking */
+	/* TODO: don't hard-code DFSDM_CHANNEL_0 */
+	HAL_DFSDM_FilterExdStart(&data->filter, DFSDM_CHANNEL_0);
 	/* The next step is typically HAL_DFSDM_FilterRegularStart_DMA, but this just starts
 	 * the associated DMA and then runs DFSDM_RegConvStart(). */
 	dma_start(data->dma.dma_dev, data->dma.channel);

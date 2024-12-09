@@ -7,6 +7,8 @@
 #define FMAC_SINC_ORDER 3
 
 int filter_start(void);
+int filter_stats(void);
+
 uint32_t filter_get_dac_dma_addr(void);
 
 #endif /* __FILTER_IN_H__ */
