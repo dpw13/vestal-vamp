@@ -7,6 +7,9 @@
 #define M_PI_F 3.14159265358979323846f
 #define M_PI_D 3.14159265358979323846
 
+/* About 0x517C...., Q1.31 0.6366 */
+#define M_TWO_OVER_PI_Q31	(q31_t)((65536.0f / M_PI_F) + 0.5f)
+
 static inline q31_t mult_q31(q31_t a, q31_t b) {
 	return __SSAT(((q63_t)a * b) >> 32, 31);
 

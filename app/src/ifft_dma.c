@@ -35,9 +35,6 @@ static q15_t ifft_td_q15_buffer[AUDIO_OUT_SAMPLE_CNT] __aligned(32);
 /* A static buffer for accumulating phase. These are stored as sQ-1.32 in the range [-0.5,0.5). */
 static q15_t phase_buf[FFT_SIZE] __aligned(32);
 
-/* 1/(2*M_PI_F) in uQ-2.18 format */
-static uint32_t inv_two_pi;
-
 q15_t injected_phase;
 
 static inline void inject_tone(uint16_t bin, uint16_t magnitude)
@@ -182,9 +179,9 @@ static void recalc_phase(q15_t phase_reset_threshold)
 		} else {
 			q31_t phase;
 			arm_atan2_q31(src[1], src[0], &phase);
-			/* TODO: this radix point is almost certainly wrong */
+			/* TODO: check radix point */
 			/* TODO: use CORDIC and DMA */
-			*dst++ = (q15_t)((phase * inv_two_pi) >> 16);
+			*dst++ = (q15_t)((M_TWO_OVER_PI_Q31 * phase) >> 15);
 		}
 		src += 2;
 	}
@@ -349,14 +346,8 @@ int ifft_init(void)
 	/* Initialize buffer accounting */
 	wr_idx = 0;
 
-	/* Initialize constants */
-	/* TODO: verify radix */
-	inv_two_pi = (uint32_t)arm_float_to_q31_once(0.5f / M_PI_F);
-
 	/* Initialize phase accumulator */
-	for (int i = 0; i < FFT_SIZE; i++) {
-		phase_buf[i] = 0;
-	}
+	memset(&phase_buf[0], 0, sizeof(phase_buf));
 
 	return 0;
 }

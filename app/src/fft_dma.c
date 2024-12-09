@@ -216,7 +216,7 @@ void precalc_polar_diff(struct polar_freq_data *dst)
 		 * to be updated, though hopefully the atan2 and sin/cos use the
 		 * same units, unlike arm_atan2_q15 and arm_sin/cos_q15
 		 */
-		*dst_ptr = ((q31_t)(65536.0f / M_PI_F) * dst_ptr[0]) >> 15;
+		*dst_ptr = (M_TWO_OVER_PI_Q31 * dst_ptr[0]) >> 15;
 		cmplx_src += 2;
 		dst_ptr++;
 	}
