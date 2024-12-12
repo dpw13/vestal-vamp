@@ -265,6 +265,7 @@
 		columns = <20>;
 		rows = <4>;
 		cgrom-size = <240>;
+		character-set = <0>;
 	};
 };
 
@@ -333,5 +334,6 @@
 };
 
 &green_led {
+	/* We use PA5 for the DAC output and PB0 for the input opamp */
 	status = "disabled";
 };

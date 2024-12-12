@@ -3,6 +3,7 @@
 #include <zephyr/drivers/dma.h>
 #include <zephyr/drivers/clock_control/stm32_clock_control.h>
 #include <stm32h7xx_hal_dfsdm.h>
+#include "arm_math.h"
 #include "math_support.h"
 #include "dfsdm_stm32.h"
 #include "fmac_stm32.h"
@@ -191,9 +192,18 @@ int filter_start(void)
 	return 0;
 }
 
+int32_t filter_get_log_amp(void) {
+	q31_t dfsdm_p2p = dfsdm_max - dfsdm_min;
+
+	return (int32_t)arm_scalar_log_q31(dfsdm_p2p); /* q5.26 */
+}
+
 int filter_stats(void)
 {
-	LOG_INF("%s: %d samples extrema %08x:%08x", dfsdm_dev->name, dfsdm_sample_count, dfsdm_min, dfsdm_max);
+	q31_t dfsdm_log_amp = filter_get_log_amp();
+	float flog_amp = (float)((10.0f/(1 << 26)) * dfsdm_log_amp);
+
+	LOG_INF("%s: %d samples extrema %08x:%08x %08x %f dB", dfsdm_dev->name, dfsdm_sample_count, dfsdm_min, dfsdm_max, dfsdm_log_amp, (double)flog_amp);
 	LOG_INF("%s: %d samples", fmac_dev->name, fmac_sample_count);
 
 	return 0;

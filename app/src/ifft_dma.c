@@ -3,12 +3,14 @@
 #include <zephyr/drivers/dma.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/sys/math_extras.h>
 #include <math.h>
 #include "audio.h"
 #include "dac.h"
 #include "dma.h"
 #include "freq_buffer.h"
 #include "math_support.h"
+#include "settings.h"
 
 #include <arm_math.h>
 #include <arm_const_structs.h>
@@ -34,6 +36,8 @@ static q15_t ifft_td_q15_buffer[AUDIO_OUT_SAMPLE_CNT] __aligned(32);
 
 /* A static buffer for accumulating phase. These are stored as sQ-1.32 in the range [-0.5,0.5). */
 static q15_t phase_buf[FFT_SIZE] __aligned(32);
+
+uint32_t ifft_mag_buf[10];
 
 q15_t injected_phase;
 
@@ -76,7 +80,6 @@ static void interp_freq(frac_idx_t idx, uint16_t pitch_shift)
 		/* TODO: Settings and debug */
 		inject_tone(128, 0x7fff);
 	}
-	// return;
 
 	/* Interpolate DC real content
 	 * Note that these equations are somewhat misleading. We are multiplying two q15s
@@ -190,8 +193,6 @@ static void recalc_phase(q15_t phase_reset_threshold)
 static void bypass_interp(frac_idx_t idx) {
 	struct polar_freq_data *src_buf = get_lt_buf(idx_ipart(idx));
 
-	//cache_data_invd_range(src_buf, sizeof(struct polar_freq_data));
-
 	q15_t *pphase = &src_buf->phase[1];
 	q15_t *pmag = &src_buf->mag[1];
 
@@ -201,9 +202,13 @@ static void bypass_interp(frac_idx_t idx) {
 	ifft_fd_buffer[2 * FFT_SIZE] = src_buf->phase[0] << 16;
 	ifft_fd_buffer[2 * FFT_SIZE + 1] = 0;
 
+	memset(ifft_mag_buf, 0, sizeof(ifft_mag_buf));
 	for (int k = 1; k < FFT_SIZE; k++) {
+		int bin = 31 - u32_count_leading_zeros(k);
 		q15_t mag = *pmag++;
 		q15_t phase = *pphase++;
+
+		ifft_mag_buf[bin] += (uint16_t)mag;
 		ifft_fd_buffer[2 * k + 0] = mult_q15_to_q31(mag, arm_cos_q15(phase)); /* Real */
 		ifft_fd_buffer[2 * k + 1] = mult_q15_to_q31(mag, arm_sin_q15(phase)); /* Imag */
 	}
@@ -281,9 +286,9 @@ static frac_idx_t current_sample_idx;
 void ifft_work_handler(struct k_work *work)
 {
 	/* Settings */
-	uint16_t pitch_shift = (1u << 8); // no shift
-	q15_t phase_reset_threshold = (1 << 2);
-	frac_idx_t tune = FRAC_IDX_UNITY; // one in buffer per out buffer
+	uint16_t pitch_shift = (uint16_t)get_uint_setting(SETTINGS_VOCODER_PITCH_SHIFT);
+	q15_t phase_reset_threshold = (q15_t)get_int_setting(SETTINGS_VOCODER_PHASE_RESET_THRESH);
+	frac_idx_t tune = (frac_idx_t)get_int_setting(SETTINGS_VOCODER_TIME_SCALE);
 
 	current_sample_idx += tune;
 #if 0

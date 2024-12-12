@@ -12,21 +12,35 @@ LOG_MODULE_REGISTER(vv_settings, LOG_LEVEL_INF);
 
 static char blinfo_version[64];
 
+const struct enum_spec bool_enum_spec = {
+	.def_count = 2,
+	.def = (const struct enum_def[2]) {
+		{ .name = "OFF", .value = 0 },
+		{ .name = "ON", .value = 1 },
+	},
+};
+
 const struct setting_top
-	setting_top = START_TOP(3) START_GROUP("Vocoder", 3)
+	setting_top = START_TOP(3) {
+	START_GROUP("Vocoder", 4) {
 		FXP_SETTING("Pitch Shift", 1.0, VV_FLAG_LOG_SCALE, 1, 1, 8),
-	FXP_SETTING("Time Shift", 1.0, VV_FLAG_LOG_SCALE, 1, 1, 8),
-	FXP_SETTING("Phase Reset Thresh", 0.001, VV_FLAG_LIN_SCALE, 1, 1, 16) END_GROUP(),
-	START_RO_GROUP("Version", 3) STR_SETTING("Bootloader", blinfo_version),
-	STR_SETTING("Zephyr", STRINGIFY(BUILD_VERSION)),
-		    STR_SETTING("Application", APP_VERSION_STRING "-" STRINGIFY(APP_BUILD_VERSION))
-					END_GROUP(),
-				START_RO_GROUP("Build Opts", 5)
-					INT_SETTING_RO("Sample Rate (Hz)", AUDIO_TIMER_HZ),
-				INT_SETTING_RO("Oversampling", AUDIO_OVERSAMPLE),
-				INT_SETTING_RO("FFT Size", FFT_SIZE),
-				INT_SETTING_RO("Overlap (%)", (100 - 100 / INV_OVERLAP)),
-				INT_SETTING_RO("Window Count", WINDOW_COUNT) END_GROUP() END_TOP();
+		FXP_SETTING("Time Scale", 1.0, VV_FLAG_LOG_SCALE, 0, 1, 8),
+		FXP_SETTING("Phase Reset Thresh", 0.001, VV_FLAG_LIN_SCALE, 0, 1, 16),
+		ENUM_SETTING("Hold", 0, 0, &bool_enum_spec),
+	END_GROUP() },
+	START_RO_GROUP("Version", 3) {
+		STR_SETTING("Bootloader", blinfo_version),
+		STR_SETTING("Zephyr", STRINGIFY(BUILD_VERSION)),
+		STR_SETTING("Application", APP_VERSION_STRING "-" STRINGIFY(APP_BUILD_VERSION))
+	END_GROUP() },
+	START_RO_GROUP("Build Opts", 5) {
+		INT_SETTING_RO("Sample Rate (Hz)", AUDIO_TIMER_HZ),
+		INT_SETTING_RO("Oversampling", AUDIO_OVERSAMPLE),
+		INT_SETTING_RO("FFT Size", FFT_SIZE),
+		INT_SETTING_RO("Overlap (%)", (100 - 100 / INV_OVERLAP)),
+		INT_SETTING_RO("Window Count", WINDOW_COUNT)
+	END_GROUP() },
+END_TOP() };
 
 int snprint_setting_int(char *buf, int buflen, int32_t val, const struct int_spec *spec)
 {

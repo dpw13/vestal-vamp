@@ -12,6 +12,7 @@
 #include "dma.h"
 #include "freq_buffer.h"
 #include "math_support.h"
+#include "settings.h"
 
 #define ENABLE_ANALYSIS	0
 
@@ -304,8 +305,10 @@ void fft_work_handler(struct k_work *work)
 	 * be an additional DMA instead. */
 	precalc_polar_diff(&lt_buffer[wr_idx]);
 	analysis_fd();
-	/* Increment the write index */
-	wr_idx = (wr_idx + 1) & WINDOW_IDX_MASK;
+	/* Increment the write index unless we're in hold */
+	if (!get_int_setting(SETTINGS_VOCODER_HOLD)) {
+		wr_idx = (wr_idx + 1) & WINDOW_IDX_MASK;
+	}
 	// LOG_DBG("FFT done");
 	window_done();
 	/* Schedule IFFT work */

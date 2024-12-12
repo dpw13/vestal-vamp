@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/gpio.h>
+#include <zephyr/logging/log.h>
 
 #include "filter.h"
 #include "adc.h"
@@ -19,8 +20,11 @@
 #include "ifft_dma.h"
 
 #include "settings.h"
+#include "ui.h"
 
-#define SLEEP_TIME_MS 750
+LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
+
+#define SLEEP_TIME_MS 250
 
 /* The devicetree node identifier for the "led1" alias. */
 #define LED_NODE DT_ALIAS(led1)
@@ -29,9 +33,12 @@ static const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(LED_NODE, gpios);
 
 /* TODO:
 SPI to ioexp debug
-FFT/IFFT debug
+FFT/IFFT re-enable time and pitch shift
 granular control
+FFT/IFFT optimization
 */
+
+void ui_display(uint16_t frame);
 
 int main(void)
 {
@@ -58,11 +65,6 @@ int main(void)
 	dac_init();
 	timer_init();
 	display_init();
-	display_text(0, " Vestal");
-	display_text(1, "     Vamp");
-	// display_text(1, "+++Line 1");
-	// display_text(2, "---Line 2");
-	// display_text(3, "***Line 3");
 
 	k_msleep(100);
 
@@ -82,10 +84,7 @@ int main(void)
 
 		led_state = !led_state;
 
-		// printf("LED state: %s\n", led_state ? "ON" : "OFF");
-		// snprintf(buf, 8, "%d", i);
-		// display_text(1, buf);
-		display_bar(2, (i & 0x100) ? 256 - (i & 0xFF) : (i & 0xFF));
+		ui_display(i);
 		i++;
 
 #if 0

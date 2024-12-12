@@ -266,26 +266,25 @@ void display_init(void)
 		return;
 	}
 
-	/*
 	auxdisplay_position_blinking_set_enabled(aux_dev, true);
-	    rc = auxdisplay_cursor_set_enabled(aux_dev, true);
-	    if (rc != 0) {
-		    LOG_ERR("Failed to enable cursor: %d", rc);
-		    return;
-	    }
 
-	rc = auxdisplay_display_on(aux_dev);
-	    if (rc != 0) {
-		    LOG_ERR("Failed to turn on display: %d", rc);
-		    return;
-	    }
+	struct auxdisplay_capabilities caps;
+	auxdisplay_capabilities_get(aux_dev, &caps);
+	uint8_t buf[8 * 5];
+	memset(&buf[0], 0, sizeof(buf));
 
-	rc = auxdisplay_clear(aux_dev);
-	    if (rc != 0) {
-		    LOG_ERR("Failed to clear display: %d", rc);
-		    return;
-	    }
-	*/
+	struct auxdisplay_character custom_char = { .data = &buf[0] };
+	for (int i=0; i < caps.custom_character_height-1; i++) {
+		/* Set one row of pixels starting from the bottom up */
+		int pxl_idx = (caps.custom_character_height - i - 1) * caps.custom_character_width;
+		memset(&buf[pxl_idx], 0xFF, caps.custom_character_width);
+		custom_char.character_code = 0xFF;
+		custom_char.index = i+1;
+		int ret = auxdisplay_custom_character_set(aux_dev, &custom_char);
+		if (ret < 0) {
+			LOG_ERR("Could not set custom character %d", i);
+		}
+	}
 
 	/* Initialize state variables */
 	menu_opt_count = 0;

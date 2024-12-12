@@ -18,6 +18,7 @@ target_sources(app PRIVATE
         src/fft_dma.c
         src/ifft_dma.c
         src/settings.c
+        src/ui.c
 
         src/cordic_stm32.c
         src/dfsdm_stm32.c
