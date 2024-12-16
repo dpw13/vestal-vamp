@@ -1,6 +1,14 @@
+.vscode
 venv
 .west
 bootloader
 modules
 tools
 build
+
+*.log
+*.raw
+
+*.obj
+*.3mf
+*.FCBak
