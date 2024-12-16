@@ -56,7 +56,8 @@ int main (void)
 
         input = uart_getchar_nonblock();
         if (input < 0) {
-            _delay_us(1000);
+            _delay_ms(500);
+            print_state();
         } else {
             uart_putchar(input, NULL);
 

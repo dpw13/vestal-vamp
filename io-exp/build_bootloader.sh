@@ -13,7 +13,7 @@ make -f Makefile optiboot_feather.hex UARTTX=B2 TIMEOUT=8 LED=C0 ENTRYCOND_REQUI
 popd
 mv $OPTIBOOT/optiboot_feather.hex .
 
-# Programming:
+# Programming bootloader:
 # python prog.py -d attiny816 -u COM4 -a write -f optiboot_feather.hex
 # Fuses:
 # SYSCFG0 5:0xf6 (UPDI pin is UPDI)
@@ -21,3 +21,6 @@ mv $OPTIBOOT/optiboot_feather.hex .
 # APPEND 7:0x00
 # BOOTEND 8:0x02
 # python prog.py -d attiny816 -u COM4 --fuses 5:0xf2 6:0x04 7:0x00 8:0x02
+
+# Programming application:
+# avrdude -c arduino -P COM4 -p t816 -U flash:w:..\io_expander.hex -D
