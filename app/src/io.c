@@ -34,7 +34,7 @@ static const struct device *const io_spi_dev = DEVICE_DT_GET(DT_BUS(DEV_IOEXP_SP
 static struct spi_config io_spi_cfg =
 	SPI_CONFIG_DT(DEV_IOEXP_SPI, SPI_OP_MODE_MASTER | SPI_MODE_CPHA | SPI_WORD_SET(8), 0);
 
-#define RING_BUF_SIZE 64
+#define RING_BUF_SIZE 512
 
 RING_BUF_DECLARE(rb_ioexp, RING_BUF_SIZE);
 struct patch_info patch_o2c = {
@@ -107,6 +107,7 @@ static void passthrough(struct patch_info *patch)
 	if (len == 0) {
 		goto done;
 	}
+	buf[len] = 0;
 
 	LOG_INF("serial: %s", buf);
 
@@ -123,11 +124,22 @@ error:
 	LOG_ERR("<<%s: Tx Error!>>", patch->name);
 }
 
-#define SPI_MAX_MSG_LEN 16
+#define SPI_MAX_MSG_LEN 17
 
-static uint8_t rxmsg[SPI_MAX_MSG_LEN];
+/* The SPI message is padded with a leading zero. We want to ensure that
+ * the actual data is aligned, so create a struct with an appropriate
+ * alignment.
+ */
+struct spi_msg {
+	uint8_t pad[3];
+	uint8_t blank;
+	uint32_t data[4];
+};
+
+static struct spi_msg rxmsg;
+
 static struct spi_buf rx = {
-	.buf = &rxmsg[0],
+	.buf = (uint8_t *)&rxmsg.blank,
 	.len = SPI_MAX_MSG_LEN,
 };
 const static struct spi_buf_set rx_bufs = {
@@ -151,9 +163,8 @@ static int get_io(void)
 
 	if (ret < 0) {
 		LOG_ERR("SPI transceive error: %d", ret);
-		//} else {
-		// uint32_t *ptr = (uint32_t *const)&rxmsg[0];
-		// LOG_INF("%08x %08x %08x %08x", ptr[0], ptr[1], ptr[2], ptr[3]);
+	} else {
+		LOG_INF("%08x %08x %08x %08x", rxmsg.data[0], rxmsg.data[1], rxmsg.data[2], rxmsg.data[3]);
 	}
 
 	return ret;

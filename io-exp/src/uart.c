@@ -8,8 +8,8 @@ FILE uart_input = FDEV_SETUP_STREAM(NULL, uart_getchar, _FDEV_SETUP_READ);
 
 FILE uart_io = FDEV_SETUP_STREAM(uart_putchar, uart_getchar, _FDEV_SETUP_RW);
 
-#define BAUD_SETTING (((20000000/6)*64) / (16L*BAUD_RATE))
-#define BAUD_ACTUAL ((64L*(20000000/6)) / (16L*BAUD_SETTING))
+#define BAUD_SETTING (((20000000)*64) / (16L*BAUD_RATE))
+#define BAUD_ACTUAL ((64L*(20000000)) / (16L*BAUD_SETTING))
 
 void uart_init(void) {
     USART0.BAUD = BAUD_SETTING;

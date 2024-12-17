@@ -85,7 +85,7 @@ void io_init(void) {
 
     /* Input configs */
     PORTA.PIN0CTRL = DI_PINCTRL; // EncA.X
-    PORTA.PIN4CTRL = DI_PINCTRL; // ~SS
+    PORTA.PIN4CTRL = PORT_PULLUPEN_bm | PORT_ISC_FALLING_gc; // ~SS
     PORTA.PIN5CTRL = DI_PINCTRL; // EncA.Y
     PORTA.PIN6CTRL = AI_PINCTRL;
     PORTA.PIN7CTRL = AI_PINCTRL;

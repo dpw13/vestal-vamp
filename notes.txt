@@ -96,3 +96,19 @@ the saturation bit.
 
 lshift of 0, a single coeff of 0x7FFF, and an FMAC input sample of 0x7F00 produces a half-scale DAC sample. This seems
 like what we want, barring scaling due to the window function.
+
+# Routing TODO:
+attiny816 pin 7 to PD14 (serial from io exp)
+        pin 6 to PD15 (serial stm32 -> ioexp)
+
+attiny  stm32   func
+7       PD14    serial ioexp->stm32
+6       PD15    serial stm32->ioexp
+14      PB5     mosi
+15      PB4     miso
+16      PB3     sck
+0       PA4     ~ss
+
+Need to order:
+24x 3 pin 0.1 in dupont female
+- matching female pins

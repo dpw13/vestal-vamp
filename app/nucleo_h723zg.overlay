@@ -246,7 +246,7 @@
 
 &spi2 {
 	fifo-enable;
-	pinctrl-0 = <&spi2_nss_pb4 &spi2_sck_pb10 &spi2_miso_pb14 &spi2_mosi_pb15>;
+	pinctrl-0 = <&spi2_nss_pb12 &spi2_sck_pb10 &spi2_miso_pb14 &spi2_mosi_pb15>;
 	pinctrl-names = "default";
 	status = "okay";
 
@@ -280,7 +280,7 @@
 
 	ioexp: ioexp@0 {
 		compatible = "vnd,io-expander";
-		spi-max-frequency = <DT_FREQ_M(10)>;
+		spi-max-frequency = <DT_FREQ_M(1)>;
 		reg = <0>;
 		status = "okay";
 	};

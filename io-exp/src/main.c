@@ -32,6 +32,9 @@ int main (void)
     /* Turn off LED */
     LED_PORT.OUTSET = LED;
 
+    /* Configure clock */
+    _PROTECTED_WRITE(CLKCTRL.MCLKCTRLB, 0);
+
     /* Select interrupt vector at 0x200 */
     _PROTECTED_WRITE(CPUINT.CTRLA, 0);
     io_init();
@@ -56,7 +59,7 @@ int main (void)
 
         input = uart_getchar_nonblock();
         if (input < 0) {
-            _delay_ms(500);
+            _delay_ms(2000);
             print_state();
         } else {
             uart_putchar(input, NULL);
